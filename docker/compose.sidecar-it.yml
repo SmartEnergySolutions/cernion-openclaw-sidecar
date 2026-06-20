@@ -1,0 +1,17 @@
+services:
+  sidecar-it:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: cernion-openclaw-sidecar-it:local
+    environment:
+      OPENCLAW_PROFILE: sidecar-it
+      OPENCLAW_GATEWAY_PORT: "19101"
+      CERNION_BASE_URL: ${CERNION_BASE_URL:-http://10.0.0.8:3900}
+      CERNION_READONLY_TOKEN_FILE: /run/secrets/cernion-readonly-token
+      CERNION_SIDECAR_TIMEOUT_MS: "15000"
+    ports:
+      - "19101:19101"
+    volumes:
+      - ${CERNION_READONLY_TOKEN_FILE:?Set CERNION_READONLY_TOKEN_FILE to a read-only Cernion token file}:/run/secrets/cernion-readonly-token:ro
+    command: ["gateway"]

@@ -1,0 +1,10 @@
+node_modules
+npm-debug.log*
+*.tgz
+.git
+.env
+.env.*
+!.env.example
+coverage
+.DS_Store
+

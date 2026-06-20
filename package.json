@@ -17,10 +17,13 @@
     "build": "tsc -p tsconfig.json",
     "plugin:build": "npm run build && openclaw plugins build --entry ./dist/index.js",
     "plugin:validate": "npm run build && openclaw plugins validate --entry ./dist/index.js",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:integration": "npm run build && node scripts/sidecar-smoke.mjs"
   },
   "files": [
     "dist",
+    "scripts",
+    "docker",
     "openclaw.plugin.json",
     "README.md"
   ],

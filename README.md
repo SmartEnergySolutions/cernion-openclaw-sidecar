@@ -45,6 +45,20 @@ npm run plugin:validate
 npm test
 ```
 
+## Integration Test Container
+
+The repository includes a Docker-based OpenClaw integration harness under `docker/`.
+It runs with an isolated OpenClaw home and profile, installs this plugin, and points
+only at the configured Cernion Sidecar provider.
+
+```bash
+CERNION_READONLY_TOKEN_FILE=/path/to/cernion-readonly-token \
+docker compose -f docker/compose.sidecar-it.yml run --rm sidecar-it test
+```
+
+The token file is mounted read-only as `/run/secrets/cernion-readonly-token`.
+No operator workspace, memory, transcripts, or personal OpenClaw state are mounted.
+
 ## Local Install
 
 From this directory:

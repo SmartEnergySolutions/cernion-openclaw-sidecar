@@ -1,0 +1,88 @@
+{
+  "id": "cernion-energy-sidecar",
+  "name": "Cernion Energy Sidecar",
+  "description": "Expose Cernion Energy Sidecar tools to OpenClaw through a read-only provider boundary.",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "baseUrl": {
+        "type": "string",
+        "description": "Cernion base URL, for example https://cernion.example"
+      },
+      "bearerToken": {
+        "type": "string",
+        "description": "Read-only Cernion bearer token. Prefer the OpenClaw secret store."
+      },
+      "bearerTokenEnv": {
+        "type": "string",
+        "description": "Environment variable name that contains the bearer token."
+      },
+      "bearerTokenFile": {
+        "type": "string",
+        "description": "Path to a local 0600 file containing the read-only bearer token."
+      },
+      "timeoutMs": {
+        "type": "number",
+        "description": "HTTP request timeout in milliseconds."
+      }
+    },
+    "additionalProperties": false
+  },
+  "activation": {
+    "onStartup": true
+  },
+  "setup": {
+    "providers": [
+      {
+        "id": "cernion",
+        "authMethods": [
+          "api_key"
+        ],
+        "envVars": [
+          "CERNION_BASE_URL",
+          "CERNION_READONLY_TOKEN"
+        ]
+      }
+    ]
+  },
+  "uiHints": {
+    "baseUrl": {
+      "label": "Cernion Base URL",
+      "placeholder": "https://cernion.example",
+      "help": "Base URL of the Cernion provider that exposes /api/agent-sidecar."
+    },
+    "bearerToken": {
+      "label": "Cernion Read-Only Token",
+      "placeholder": "${CERNION_READONLY_TOKEN}",
+      "help": "Read-only Cernion Sidecar token. Store as an OpenClaw secret.",
+      "sensitive": true
+    },
+    "bearerTokenEnv": {
+      "label": "Bearer Token Env Var",
+      "placeholder": "CERNION_READONLY_TOKEN",
+      "help": "Optional environment variable name for the read-only token.",
+      "advanced": true
+    },
+    "bearerTokenFile": {
+      "label": "Bearer Token File",
+      "placeholder": "/path/to/cernion-readonly-token",
+      "help": "Optional local file containing the read-only token. Prefer mode 0600.",
+      "sensitive": true,
+      "advanced": true
+    },
+    "timeoutMs": {
+      "label": "Request Timeout",
+      "placeholder": "15000",
+      "help": "HTTP request timeout in milliseconds.",
+      "advanced": true
+    }
+  },
+  "contracts": {
+    "tools": [
+      "cernion_sidecar_descriptor",
+      "cernion_sidecar_tools",
+      "cernion_sidecar_call"
+    ]
+  }
+}

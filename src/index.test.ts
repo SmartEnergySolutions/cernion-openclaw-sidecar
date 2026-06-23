@@ -1,17 +1,27 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import entry, { buildQueryPath, buildUrl, requireConfig, requestCernion, scrubSecretValues } from "./index.js";
+import entry, {
+  buildQueryPath,
+  buildUrl,
+  executeRestExecutionPlan,
+  requireConfig,
+  requestCernion,
+  scrubSecretValues,
+  validateRestExecutionPlan,
+} from "./index.js";
 import { getToolPluginMetadata } from "openclaw/plugin-sdk/tool-plugin";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 const EXPECTED_TOOLS = [
+  "cernion_ask",
   "cernion_sidecar_descriptor",
   "cernion_sidecar_tools",
   "cernion_sidecar_call",
   "cernion_resolve_capabilities",
   "cernion_resolve_capability",
   "cernion_resolve_operations",
+  "cernion_execute_rest_plan",
   "cernion_api_request",
 ];
 
@@ -248,6 +258,147 @@ describe("cernion-energy-sidecar", () => {
         }),
       }),
     );
+  });
+
+  it("maps cernion.ask to the generic provider tool gate", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      text: async () =>
+        JSON.stringify({
+          isError: false,
+          structuredContent: {
+            answer: "resolved",
+            executionPlan: {
+              method: "GET",
+              path: "/api/assets/solar",
+              query: { location: "69168" },
+            },
+          },
+        }),
+    } as Response);
+
+    const result = await requestCernion(
+      {
+        baseUrl: "https://cernion.example",
+        bearerToken: "ck_readonly_secret",
+      },
+      "/api/agent-sidecar/mcp/tools/cernion.ask/call",
+      {
+        method: "POST",
+        body: {
+          arguments: {
+            query: "Finde PV Anlagen in Wiesloch 2025 um 10 kWp",
+            context: { tenantId: "public" },
+            inputs: { location: "69168" },
+          },
+        },
+      },
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://cernion.example/api/agent-sidecar/mcp/tools/cernion.ask/call",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          arguments: {
+            query: "Finde PV Anlagen in Wiesloch 2025 um 10 kWp",
+            context: { tenantId: "public" },
+            inputs: { location: "69168" },
+          },
+        }),
+      }),
+    );
+    expect(result).toMatchObject({
+      isError: false,
+      structuredContent: {
+        executionPlan: {
+          path: "/api/assets/solar",
+        },
+      },
+    });
+  });
+
+  it("validates read-only REST execution plans from Cernion", () => {
+    expect(
+      validateRestExecutionPlan({
+        method: "GET",
+        path: "/api/assets/solar",
+        params: { location: "69168" },
+        query: { commissioningYear: 2025 },
+      }),
+    ).toEqual({
+      method: "GET",
+      path: "/api/assets/solar",
+      params: { location: "69168", commissioningYear: 2025 },
+    });
+
+    expect(() => validateRestExecutionPlan({ method: "POST", path: "/api/assets/solar" })).toThrow(/GET/);
+    expect(() => validateRestExecutionPlan({ method: "GET", path: "https://cernion.example/api/assets/solar" })).toThrow(
+      /relative \/api\//,
+    );
+    expect(() => validateRestExecutionPlan({ method: "GET", path: "/api/admin/users" })).toThrow(/read-only/);
+    expect(() => validateRestExecutionPlan({ method: "GET", path: "/api/agent-sidecar/mcp/tools/cernion.ask/call" })).toThrow(
+      /read-only/,
+    );
+  });
+
+  it("proxies Cernion-issued read-only REST execution plans without exposing base URL or token", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      text: async () =>
+        JSON.stringify({
+          success: true,
+          assets: [{ see: "SEE912915502954", echoed: "ck_readonly_secret" }],
+        }),
+    } as Response);
+
+    const result = await executeRestExecutionPlan(
+      {
+        baseUrl: "https://cernion.example/",
+        bearerToken: "ck_readonly_secret",
+      },
+      {
+        method: "GET",
+        path: "/api/assets/solar",
+        query: {
+          location: "69168",
+          minCapacityKW: 10,
+          maxCapacityKW: 13,
+          commissioningYear: 2025,
+        },
+      },
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://cernion.example/api/assets/solar?location=69168&minCapacityKW=10&maxCapacityKW=13&commissioningYear=2025",
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({
+          authorization: "Bearer ck_readonly_secret",
+        }),
+      }),
+    );
+    expect(result).toEqual({
+      success: true,
+      assets: [{ see: "SEE912915502954", echoed: "[redacted]" }],
+    });
+  });
+
+  it("can disable the direct REST proxy by configuration", async () => {
+    await expect(
+      executeRestExecutionPlan(
+        {
+          baseUrl: "https://cernion.example/",
+          bearerToken: "ck_readonly_secret",
+          allowRestProxy: false,
+        },
+        { method: "GET", path: "/api/assets/solar" },
+      ),
+    ).rejects.toThrow(/disabled/);
   });
 
   it("sends authenticated GET requests via requestCernion with params", async () => {

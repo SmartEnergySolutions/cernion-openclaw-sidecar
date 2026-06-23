@@ -10,6 +10,9 @@ const configSchema = Type.Object(
     bearerToken: Type.Optional(Type.String({ description: "Read-only Cernion bearer token. Prefer the OpenClaw secret store." })),
     bearerTokenEnv: Type.Optional(Type.String({ description: "Environment variable name that contains the bearer token." })),
     bearerTokenFile: Type.Optional(Type.String({ description: "Path to a local 0600 file containing the read-only bearer token." })),
+    allowRestProxy: Type.Optional(
+      Type.Boolean({ description: "Allow read-only REST execution plans emitted by Cernion to be proxied through this sidecar." }),
+    ),
     timeoutMs: Type.Optional(Type.Number({ description: "HTTP request timeout in milliseconds." })),
   },
   { additionalProperties: false },
@@ -20,6 +23,7 @@ type PluginConfig = {
   bearerToken?: string;
   bearerTokenEnv?: string;
   bearerTokenFile?: string;
+  allowRestProxy?: boolean;
   timeoutMs?: number;
 };
 
@@ -27,6 +31,14 @@ type RequestOptions = {
   method?: "GET" | "POST";
   body?: unknown;
   signal?: AbortSignal;
+};
+
+type RestExecutionPlan = {
+  method?: string;
+  path: string;
+  params?: Record<string, unknown>;
+  query?: Record<string, unknown>;
+  policy?: Record<string, unknown>;
 };
 
 function stripTrailingSlash(value: string): string {
@@ -82,6 +94,65 @@ function buildQueryPath(path: string, params: Record<string, unknown> = {}): str
   return `${path}${separator}${queryParams.toString()}`;
 }
 
+function isRestProxyAllowed(config: PluginConfig): boolean {
+  if (config.allowRestProxy !== undefined) return config.allowRestProxy;
+  const value = (process.env.CERNION_ALLOW_REST_PROXY || "").trim().toLowerCase();
+  if (!value) return true;
+  return !["0", "false", "no", "off"].includes(value);
+}
+
+function validateRestExecutionPlan(plan: RestExecutionPlan): { method: "GET"; path: string; params: Record<string, unknown> } {
+  const method = (plan.method || "GET").toUpperCase();
+  if (method !== "GET") {
+    throw new Error("Only read-only GET execution plans can be proxied by the Cernion Sidecar.");
+  }
+
+  if (!plan.path || typeof plan.path !== "string") {
+    throw new Error("REST execution plan requires a relative Cernion API path.");
+  }
+
+  if (plan.path.includes("://") || plan.path.startsWith("//") || !plan.path.startsWith("/api/")) {
+    throw new Error("REST execution plan path must be a relative /api/ path.");
+  }
+
+  const lowerPath = plan.path.toLowerCase();
+  const blockedPathMarkers = [
+    "/api/admin",
+    "/api/auth",
+    "/api/token",
+    "/api/tokens",
+    "/api/secret",
+    "/api/secrets",
+    "/api/hitl/resolve",
+    "/api/agent-sidecar/mcp/tools/",
+  ];
+  if (blockedPathMarkers.some((marker) => lowerPath.startsWith(marker))) {
+    throw new Error("REST execution plan path is outside the read-only Sidecar proxy boundary.");
+  }
+
+  return {
+    method: "GET",
+    path: plan.path,
+    params: { ...(plan.params || {}), ...(plan.query || {}) },
+  };
+}
+
+async function executeRestExecutionPlan(
+  config: PluginConfig,
+  plan: RestExecutionPlan,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  if (!isRestProxyAllowed(config)) {
+    throw new Error("Cernion read-only REST proxy is disabled by configuration.");
+  }
+
+  const validated = validateRestExecutionPlan(plan);
+  return requestCernion(config, buildQueryPath(validated.path, validated.params), {
+    method: validated.method,
+    signal,
+  });
+}
+
 async function requestCernion(config: PluginConfig, path: string, options: RequestOptions = {}): Promise<unknown> {
   const { baseUrl, bearerToken, timeoutMs } = requireConfig(config);
   const controller = new AbortController();
@@ -135,6 +206,25 @@ export default defineToolPlugin({
   description: "Expose Cernion Energy Sidecar tools to OpenClaw through a read-only provider boundary.",
   configSchema,
   tools: (tool) => [
+    tool({
+      name: "cernion_ask",
+      label: "Ask Cernion",
+      description:
+        "Ask Cernion through the generic provider gate. Cernion may answer directly or return structured capability, blueprint, evidence, and read-only REST execution-plan hints that OpenClaw can reuse.",
+      parameters: Type.Object({
+        query: Type.String({ description: "Natural-language request or task context to resolve inside Cernion." }),
+        context: Type.Optional(Type.Record(Type.String(), Type.Any(), { description: "Optional tenant, user, or session context." })),
+        inputs: Type.Optional(Type.Record(Type.String(), Type.Any(), { description: "Optional structured inputs already known to OpenClaw." })),
+      }),
+      execute: async ({ query, context: requestContext = {}, inputs = {} }, config, context) => {
+        const result = await requestCernion(config, "/api/agent-sidecar/mcp/tools/cernion.ask/call", {
+          method: "POST",
+          body: { arguments: { query, context: requestContext, inputs } },
+          signal: context.signal,
+        });
+        return scrubSecretValues(result, config.bearerToken);
+      },
+    }),
     tool({
       name: "cernion_sidecar_descriptor",
       label: "Cernion Sidecar Descriptor",
@@ -225,6 +315,23 @@ export default defineToolPlugin({
       },
     }),
     tool({
+      name: "cernion_execute_rest_plan",
+      label: "Execute Cernion REST Plan",
+      description:
+        "Proxy one read-only Cernion REST execution plan emitted by cernion.ask or the Cernion blueprint/capability runtime. The Sidecar supplies the configured base URL and bearer token, validates the plan as GET-only, and returns scrubbed structured results.",
+      parameters: Type.Object({
+        method: Type.Optional(Type.String({ description: "HTTP method from the execution plan. Only GET is allowed." })),
+        path: Type.String({ description: "Relative Cernion API path from the execution plan, e.g. /api/assets/solar." }),
+        params: Type.Optional(Type.Record(Type.String(), Type.Any(), { description: "Query parameters from the execution plan." })),
+        query: Type.Optional(Type.Record(Type.String(), Type.Any(), { description: "Alias for params, used by some Cernion plan envelopes." })),
+        policy: Type.Optional(Type.Record(Type.String(), Type.Any(), { description: "Optional policy metadata returned by Cernion." })),
+      }),
+      execute: async (plan, config, context) => {
+        const result = await executeRestExecutionPlan(config, plan, context.signal);
+        return scrubSecretValues(result, config.bearerToken);
+      },
+    }),
+    tool({
       name: "cernion_api_request",
       label: "Cernion API Request",
       description: "Perform an authenticated read-only GET request directly against Cernion Energy Tools (CET). Must be used to resolve capabilities, operations, or query specific domain data (like assets.solar) following the llm.txt RESOLUTION PROTOCOL.",
@@ -243,4 +350,13 @@ export default defineToolPlugin({
   ],
 });
 
-export { buildQueryPath, buildUrl, requireConfig, requestCernion, scrubSecretValues };
+export {
+  buildQueryPath,
+  buildUrl,
+  executeRestExecutionPlan,
+  isRestProxyAllowed,
+  requireConfig,
+  requestCernion,
+  scrubSecretValues,
+  validateRestExecutionPlan,
+};

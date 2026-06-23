@@ -22,6 +22,10 @@
         "type": "string",
         "description": "Path to a local 0600 file containing the read-only bearer token."
       },
+      "allowRestProxy": {
+        "type": "boolean",
+        "description": "Allow read-only REST execution plans emitted by Cernion to be proxied through this sidecar."
+      },
       "timeoutMs": {
         "type": "number",
         "description": "HTTP request timeout in milliseconds."
@@ -80,12 +84,14 @@
   },
   "contracts": {
     "tools": [
+      "cernion_ask",
       "cernion_sidecar_descriptor",
       "cernion_sidecar_tools",
       "cernion_sidecar_call",
       "cernion_resolve_capabilities",
       "cernion_resolve_capability",
       "cernion_resolve_operations",
+      "cernion_execute_rest_plan",
       "cernion_api_request"
     ]
   }

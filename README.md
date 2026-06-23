@@ -7,20 +7,25 @@ The plugin consumes the Cernion Sidecar contract implemented by Cernion Energy T
 - `GET /api/agent-sidecar/descriptor`
 - `GET /api/agent-sidecar/mcp/tools`
 - `POST /api/agent-sidecar/mcp/tools/:name/call`
+- `POST /api/agent-sidecar/mcp/tools/cernion.ask/call`
 - `GET /api/_agent/capabilities[?domain=]`
 - `GET /api/_agent/capabilities/:name`
 - `GET /api/_agent/operations[?domain=]`
 
 The Cernion provider remains the policy owner. This plugin stores host-side configuration, discovers tools, and forwards calls through the read-only/advisory provider boundary. It does not implement Cernion domain logic and must not expose write/admin/token/HITL-resolve actions.
 
+`cernion.ask` is the generic learning/compile boundary for OpenClaw. It may return a direct read-only REST execution plan that was selected by Cernion's Blueprint/Capability runtime. OpenClaw can then ask this plugin to proxy that plan against the configured Cernion `baseUrl` without learning tokens or hard-coding domain routing in the Sidecar.
+
 ## Tools
 
 - `cernion_sidecar_descriptor` loads the generic Energy Sidecar descriptor.
 - `cernion_sidecar_tools` loads the MCP/OpenClaw-like tool list.
 - `cernion_sidecar_call` calls one curated Cernion provider tool through the provider policy gate.
+- `cernion_ask` calls the generic `cernion.ask` provider tool and returns structured answers, evidence, capability/blueprint hints, and optional read-only REST execution plans.
 - `cernion_resolve_capabilities` resolves llm.txt capability cluster heads to full capability details, optionally filtered by `domain`.
 - `cernion_resolve_capability` resolves a single capability id to full detail.
 - `cernion_resolve_operations` resolves manifest operation clusters to deduplicated operation details, optionally filtered by `domain`.
+- `cernion_execute_rest_plan` proxies one GET-only REST execution plan emitted by Cernion. It validates that the plan is a relative `/api/` path and blocks admin/auth/token/HITL-resolve/provider-tool recursion paths.
 - `cernion_api_request` performs an authenticated read-only GET against Cernion for fallback resolution or domain data queries.
 
 `cernion_resolve_operations` uses the provider's canonicalized operation list: duplicate `operationId` entries that appear under trailing-slash or service-prefix aliases are returned once with a canonical path and an `aliases` list.
@@ -41,6 +46,7 @@ Configure through OpenClaw plugin settings or environment variables:
 - `bearerToken` or `CERNION_READONLY_TOKEN`: read-only Cernion Sidecar token.
 - `bearerTokenEnv`: optional alternate token environment variable name.
 - `bearerTokenFile` or `CERNION_READONLY_TOKEN_FILE`: optional path to a local file containing the read-only token.
+- `allowRestProxy` or `CERNION_ALLOW_REST_PROXY`: optional switch for `cernion_execute_rest_plan`, default enabled. Set to `false`, `0`, `no`, or `off` to disable.
 - `timeoutMs`: optional HTTP timeout, default `15000`.
 
 Store the token as an OpenClaw secret. The token is sent only as an `Authorization: Bearer ...` header and is scrubbed from returned payloads if a provider accidentally echoes it.
@@ -98,12 +104,16 @@ Allowed:
 - read-only/advisory tool discovery
 - calls to the five curated Cernion Sidecar tools
 - resolve calls to the Cernion agent manifest endpoints
+- generic `cernion.ask` calls where Cernion decides capabilities, blueprints, routing, policies, and evidence
+- GET-only proxy execution of Cernion-issued REST plans against the configured provider `baseUrl`
 - structured propagation of `sidecar_policy_blocked`
 
 Blocked:
 
 - Full Cernion OpenAPI export
 - write/admin/token/HITL-resolve actions
+- Sidecar-owned domain routing such as hard-coded MaStR asset tools
+- arbitrary external URLs or non-`/api/` REST proxy paths
 - production mutation
 - secrets in descriptors, logs, or tool responses
 - OpenClaw workspace coupling inside Cernion

@@ -7,6 +7,9 @@ The plugin consumes the Cernion Sidecar contract implemented by Cernion Energy T
 - `GET /api/agent-sidecar/descriptor`
 - `GET /api/agent-sidecar/mcp/tools`
 - `POST /api/agent-sidecar/mcp/tools/:name/call`
+- `GET /api/_agent/capabilities[?domain=]`
+- `GET /api/_agent/capabilities/:name`
+- `GET /api/_agent/operations[?domain=]`
 
 The Cernion provider remains the policy owner. This plugin stores host-side configuration, discovers tools, and forwards calls through the read-only/advisory provider boundary. It does not implement Cernion domain logic and must not expose write/admin/token/HITL-resolve actions.
 
@@ -15,6 +18,12 @@ The Cernion provider remains the policy owner. This plugin stores host-side conf
 - `cernion_sidecar_descriptor` loads the generic Energy Sidecar descriptor.
 - `cernion_sidecar_tools` loads the MCP/OpenClaw-like tool list.
 - `cernion_sidecar_call` calls one curated Cernion provider tool through the provider policy gate.
+- `cernion_resolve_capabilities` resolves llm.txt capability cluster heads to full capability details, optionally filtered by `domain`.
+- `cernion_resolve_capability` resolves a single capability id to full detail.
+- `cernion_resolve_operations` resolves manifest operation clusters to deduplicated operation details, optionally filtered by `domain`.
+- `cernion_api_request` performs an authenticated read-only GET against Cernion for fallback resolution or domain data queries.
+
+`cernion_resolve_operations` uses the provider's canonicalized operation list: duplicate `operationId` entries that appear under trailing-slash or service-prefix aliases are returned once with a canonical path and an `aliases` list.
 
 The provider tool names currently exposed by Cernion are:
 
@@ -88,6 +97,7 @@ Allowed:
 
 - read-only/advisory tool discovery
 - calls to the five curated Cernion Sidecar tools
+- resolve calls to the Cernion agent manifest endpoints
 - structured propagation of `sidecar_policy_blocked`
 
 Blocked:

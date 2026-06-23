@@ -69,6 +69,19 @@ function buildUrl(baseUrl: string, path: string): string {
   return `${baseUrl}${normalizedPath}`;
 }
 
+function buildQueryPath(path: string, params: Record<string, unknown> = {}): string {
+  const queryParams = new URLSearchParams();
+  for (const [key, val] of Object.entries(params)) {
+    if (val !== undefined && val !== null && val !== "") {
+      queryParams.append(key, String(val));
+    }
+  }
+  if (!queryParams.toString()) return path;
+
+  const separator = path.includes("?") ? "&" : "?";
+  return `${path}${separator}${queryParams.toString()}`;
+}
+
 async function requestCernion(config: PluginConfig, path: string, options: RequestOptions = {}): Promise<unknown> {
   const { baseUrl, bearerToken, timeoutMs } = requireConfig(config);
   const controller = new AbortController();
@@ -157,7 +170,75 @@ export default defineToolPlugin({
         return scrubSecretValues(result, config.bearerToken);
       },
     }),
+    tool({
+      name: "cernion_resolve_capabilities",
+      label: "Resolve Cernion Capabilities",
+      description:
+        "Resolve capability cluster heads from the llm.txt manifest to full Cernion capability details via GET /api/_agent/capabilities. Optionally filter by canonical manifest domain.",
+      parameters: Type.Object({
+        domain: Type.Optional(
+          Type.String({ description: "Optional canonical manifest domain, e.g. 'redispatch' or 'grid-ops'." }),
+        ),
+      }),
+      execute: async ({ domain }, config, context) => {
+        const result = await requestCernion(config, buildQueryPath("/api/_agent/capabilities", { domain }), {
+          method: "GET",
+          signal: context.signal,
+        });
+        return scrubSecretValues(result, config.bearerToken);
+      },
+    }),
+    tool({
+      name: "cernion_resolve_capability",
+      label: "Resolve Cernion Capability",
+      description:
+        "Resolve one Cernion capability id from the llm.txt manifest to its full capability detail via GET /api/_agent/capabilities/:name.",
+      parameters: Type.Object({
+        name: Type.String({ description: "Capability id, e.g. 'redispatch_asset_register'." }),
+      }),
+      execute: async ({ name }, config, context) => {
+        const result = await requestCernion(config, `/api/_agent/capabilities/${encodeURIComponent(name)}`, {
+          method: "GET",
+          signal: context.signal,
+        });
+        return scrubSecretValues(result, config.bearerToken);
+      },
+    }),
+    tool({
+      name: "cernion_resolve_operations",
+      label: "Resolve Cernion Operations",
+      description:
+        "Resolve operation clusters from the llm.txt manifest to deduplicated Cernion OpenAPI operation details via GET /api/_agent/operations. Duplicate operationIds are returned as one canonical path with aliases.",
+      parameters: Type.Object({
+        domain: Type.Optional(
+          Type.String({ description: "Optional canonical manifest domain, e.g. 'redispatch' or 'grid-ops'." }),
+        ),
+      }),
+      execute: async ({ domain }, config, context) => {
+        const result = await requestCernion(config, buildQueryPath("/api/_agent/operations", { domain }), {
+          method: "GET",
+          signal: context.signal,
+        });
+        return scrubSecretValues(result, config.bearerToken);
+      },
+    }),
+    tool({
+      name: "cernion_api_request",
+      label: "Cernion API Request",
+      description: "Perform an authenticated read-only GET request directly against Cernion Energy Tools (CET). Must be used to resolve capabilities, operations, or query specific domain data (like assets.solar) following the llm.txt RESOLUTION PROTOCOL.",
+      parameters: Type.Object({
+        path: Type.String({ description: "The API path to call, e.g. '/api/_agent/capabilities', '/api/_agent/operations', '/api/assets/solar'." }),
+        params: Type.Optional(Type.Record(Type.String(), Type.Any(), { description: "Query parameters to append to the GET request." })),
+      }),
+      execute: async ({ path, params = {} }, config, context) => {
+        const result = await requestCernion(config, buildQueryPath(path, params), {
+          method: "GET",
+          signal: context.signal,
+        });
+        return scrubSecretValues(result, config.bearerToken);
+      },
+    }),
   ],
 });
 
-export { buildUrl, requireConfig, requestCernion, scrubSecretValues };
+export { buildQueryPath, buildUrl, requireConfig, requestCernion, scrubSecretValues };

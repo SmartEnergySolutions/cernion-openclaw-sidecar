@@ -82,7 +82,11 @@
     "tools": [
       "cernion_sidecar_descriptor",
       "cernion_sidecar_tools",
-      "cernion_sidecar_call"
+      "cernion_sidecar_call",
+      "cernion_resolve_capabilities",
+      "cernion_resolve_capability",
+      "cernion_resolve_operations",
+      "cernion_api_request"
     ]
   }
 }

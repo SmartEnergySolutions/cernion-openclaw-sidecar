@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import entry, { buildUrl, requireConfig, requestCernion, scrubSecretValues } from "./index.js";
+import entry, { buildQueryPath, buildUrl, requireConfig, requestCernion, scrubSecretValues } from "./index.js";
 import { getToolPluginMetadata } from "openclaw/plugin-sdk/tool-plugin";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -9,6 +9,10 @@ const EXPECTED_TOOLS = [
   "cernion_sidecar_descriptor",
   "cernion_sidecar_tools",
   "cernion_sidecar_call",
+  "cernion_resolve_capabilities",
+  "cernion_resolve_capability",
+  "cernion_resolve_operations",
+  "cernion_api_request",
 ];
 
 describe("cernion-energy-sidecar", () => {
@@ -74,6 +78,16 @@ describe("cernion-energy-sidecar", () => {
     expect(buildUrl("https://cernion.example", "api/agent-sidecar/descriptor")).toBe(
       "https://cernion.example/api/agent-sidecar/descriptor",
     );
+  });
+
+  it("builds query paths with encoded optional parameters", () => {
+    expect(buildQueryPath("/api/_agent/capabilities", { domain: "grid ops" })).toBe(
+      "/api/_agent/capabilities?domain=grid+ops",
+    );
+    expect(buildQueryPath("/api/_agent/operations?domain=redispatch", { cursor: "next/page" })).toBe(
+      "/api/_agent/operations?domain=redispatch&cursor=next%2Fpage",
+    );
+    expect(buildQueryPath("/api/_agent/operations", { domain: "", skip: null })).toBe("/api/_agent/operations");
   });
 
   it("scrubs configured bearer token from returned data", () => {
@@ -166,6 +180,61 @@ describe("cernion-energy-sidecar", () => {
           arguments: {
             context: { tenantId: "public" },
           },
+        }),
+      }),
+    );
+  });
+
+  it("sends authenticated GET requests via requestCernion with params", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      text: async () => JSON.stringify({ success: true, data: [] }),
+    } as Response);
+
+    const result = await requestCernion(
+      {
+        baseUrl: "https://cernion.example",
+        bearerToken: "ck_readonly_secret",
+      },
+      "/api/_agent/capabilities?domain=grid-ops",
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://cernion.example/api/_agent/capabilities?domain=grid-ops",
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({
+          authorization: "Bearer ck_readonly_secret",
+        }),
+      }),
+    );
+    expect(result).toEqual({ success: true, data: [] });
+  });
+
+  it("sends authenticated requests to the new manifest resolve endpoints", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      text: async () => JSON.stringify({ success: true, data: [{ operationId: "gridData", aliases: [] }] }),
+    } as Response);
+
+    await requestCernion(
+      {
+        baseUrl: "https://cernion.example",
+        bearerToken: "ck_readonly_secret",
+      },
+      buildQueryPath("/api/_agent/operations", { domain: "grid-ops" }),
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://cernion.example/api/_agent/operations?domain=grid-ops",
+      expect.objectContaining({
+        method: "GET",
+        headers: expect.objectContaining({
+          authorization: "Bearer ck_readonly_secret",
         }),
       }),
     );

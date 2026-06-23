@@ -16,8 +16,9 @@ declare function requireConfig(config: PluginConfig): {
     timeoutMs: number;
 };
 declare function buildUrl(baseUrl: string, path: string): string;
+declare function buildQueryPath(path: string, params?: Record<string, unknown>): string;
 declare function requestCernion(config: PluginConfig, path: string, options?: RequestOptions): Promise<unknown>;
 declare function scrubSecretValues(value: unknown, token?: string): unknown;
 declare const _default: import("openclaw/plugin-sdk/tool-plugin").DefinedToolPluginEntry;
 export default _default;
-export { buildUrl, requireConfig, requestCernion, scrubSecretValues };
+export { buildQueryPath, buildUrl, requireConfig, requestCernion, scrubSecretValues };

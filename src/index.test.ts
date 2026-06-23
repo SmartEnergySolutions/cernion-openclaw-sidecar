@@ -289,6 +289,7 @@ describe("cernion-energy-sidecar", () => {
         method: "POST",
         body: {
           arguments: {
+            question: "Finde PV Anlagen in Wiesloch 2025 um 10 kWp",
             query: "Finde PV Anlagen in Wiesloch 2025 um 10 kWp",
             context: { tenantId: "public" },
             inputs: { location: "69168" },
@@ -303,6 +304,7 @@ describe("cernion-energy-sidecar", () => {
         method: "POST",
         body: JSON.stringify({
           arguments: {
+            question: "Finde PV Anlagen in Wiesloch 2025 um 10 kWp",
             query: "Finde PV Anlagen in Wiesloch 2025 um 10 kWp",
             context: { tenantId: "public" },
             inputs: { location: "69168" },

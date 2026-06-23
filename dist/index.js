@@ -166,7 +166,7 @@ export default defineToolPlugin({
             execute: async ({ query, context: requestContext = {}, inputs = {} }, config, context) => {
                 const result = await requestCernion(config, "/api/agent-sidecar/mcp/tools/cernion.ask/call", {
                     method: "POST",
-                    body: { arguments: { query, context: requestContext, inputs } },
+                    body: { arguments: { question: query, query, context: requestContext, inputs } },
                     signal: context.signal,
                 });
                 return scrubSecretValues(result, config.bearerToken);

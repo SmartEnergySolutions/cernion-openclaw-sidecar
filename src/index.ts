@@ -101,6 +101,7 @@ async function requestCernion(config: PluginConfig, path: string, options: Reque
     });
     const text = await response.text();
     const parsed = text ? JSON.parse(text) : null;
+    const safeParsed = scrubSecretValues(parsed, bearerToken);
 
     if (!response.ok) {
       return {
@@ -110,11 +111,11 @@ async function requestCernion(config: PluginConfig, path: string, options: Reque
           status: response.status,
           statusText: response.statusText,
         },
-        structuredContent: parsed,
+        structuredContent: safeParsed,
       };
     }
 
-    return parsed;
+    return safeParsed;
   } finally {
     clearTimeout(timeout);
   }
@@ -123,6 +124,7 @@ async function requestCernion(config: PluginConfig, path: string, options: Reque
 function scrubSecretValues(value: unknown, token?: string): unknown {
   const serialized = JSON.stringify(value);
   if (!serialized) return value;
+  if (!token) return value;
   const scrubbed = token ? serialized.split(token).join("[redacted]") : serialized;
   return JSON.parse(scrubbed);
 }

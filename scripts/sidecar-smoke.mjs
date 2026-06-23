@@ -43,6 +43,20 @@ const call = await requestCernion(config, "/api/agent-sidecar/mcp/tools/cernion.
 assertNoSecretEcho(call);
 assert.notEqual(call?.error?.code, "sidecar_policy_blocked", "read-only capabilities call should not be policy-blocked");
 
+const capabilities = await requestCernion(config, "/api/_agent/capabilities");
+assert.equal(capabilities?.success, true);
+assert(Array.isArray(capabilities?.data), "capabilities.data must be an array");
+assertNoSecretEcho(capabilities);
+
+const operations = await requestCernion(config, "/api/_agent/operations");
+assert.equal(operations?.success, true);
+assert(Array.isArray(operations?.data), "operations.data must be an array");
+assert(
+  operations.data.every((operation) => Array.isArray(operation.aliases)),
+  "operations entries must include aliases arrays",
+);
+assertNoSecretEcho(operations);
+
 console.log(
   JSON.stringify(
     {
@@ -50,9 +64,10 @@ console.log(
       provider: descriptor.provider.id,
       descriptorTools: descriptor.tools.length,
       mcpTools: tools.tools.length,
+      capabilities: capabilities.data.length,
+      operations: operations.data.length,
     },
     null,
     2,
   ),
 );
-

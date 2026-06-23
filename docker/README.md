@@ -35,6 +35,7 @@ The smoke test validates:
 - descriptor retrieval from the Cernion DevServer
 - tool-list retrieval from the Cernion DevServer
 - a read-only `cernion.list_readonly_capabilities` tool call
+- manifest capability and operation resolution through `/api/_agent`
 
 ## Gateway
 

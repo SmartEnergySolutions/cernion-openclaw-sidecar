@@ -141,6 +141,71 @@ describe("cernion-energy-sidecar", () => {
     expect(JSON.stringify(result)).not.toContain("ck_readonly_secret");
   });
 
+  it("scrubs bearer tokens resolved from environment variables", async () => {
+    process.env.CERNION_BASE_URL = "https://cernion.example";
+    process.env.CERNION_READONLY_TOKEN = "ck_env_secret";
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      text: async () =>
+        JSON.stringify({
+          provider: { id: "cernion" },
+          accidental: "ck_env_secret",
+        }),
+    } as Response);
+
+    const result = await requestCernion({}, "/api/agent-sidecar/descriptor");
+
+    expect(result).toEqual({
+      provider: { id: "cernion" },
+      accidental: "[redacted]",
+    });
+    expect(JSON.stringify(result)).not.toContain("ck_env_secret");
+  });
+
+  it("scrubs bearer tokens resolved from token files in error payloads", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "cernion-sidecar-"));
+    const tokenPath = join(dir, "token");
+    try {
+      writeFileSync(tokenPath, "ck_file_secret\n", { mode: 0o600 });
+      vi.spyOn(globalThis, "fetch").mockResolvedValue({
+        ok: false,
+        status: 403,
+        statusText: "Forbidden",
+        text: async () =>
+          JSON.stringify({
+            message: "not allowed",
+            echoed: "ck_file_secret",
+          }),
+      } as Response);
+
+      const result = await requestCernion(
+        {
+          baseUrl: "https://cernion.example",
+          bearerTokenFile: tokenPath,
+        },
+        "/api/_agent/capabilities",
+      );
+
+      expect(result).toEqual({
+        isError: true,
+        error: {
+          code: "cernion_http_error",
+          status: 403,
+          statusText: "Forbidden",
+        },
+        structuredContent: {
+          message: "not allowed",
+          echoed: "[redacted]",
+        },
+      });
+      expect(JSON.stringify(result)).not.toContain("ck_file_secret");
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
   it("maps tool calls to the Cernion MCP-like endpoint", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,

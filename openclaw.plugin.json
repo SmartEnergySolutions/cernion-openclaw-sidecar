@@ -1,7 +1,7 @@
 {
   "id": "cernion-energy-sidecar",
   "name": "Cernion Energy Sidecar",
-  "description": "Expose Cernion Energy Sidecar tools to OpenClaw through a read-only provider boundary.",
+  "description": "Expose Cernion Energy Sidecar tools to OpenClaw through separated evidence and process boundaries.",
   "version": "0.1.0",
   "configSchema": {
     "type": "object",
@@ -21,6 +21,18 @@
       "bearerTokenFile": {
         "type": "string",
         "description": "Path to a local 0600 file containing the read-only bearer token."
+      },
+      "processBearerToken": {
+        "type": "string",
+        "description": "Cernion process-intake bearer token. Keep separate from the read-only token."
+      },
+      "processBearerTokenEnv": {
+        "type": "string",
+        "description": "Environment variable name that contains the process-intake bearer token."
+      },
+      "processBearerTokenFile": {
+        "type": "string",
+        "description": "Path to a local 0600 file containing the process-intake bearer token."
       },
       "allowRestProxy": {
         "type": "boolean",
@@ -45,7 +57,8 @@
         ],
         "envVars": [
           "CERNION_BASE_URL",
-          "CERNION_READONLY_TOKEN"
+          "CERNION_READONLY_TOKEN",
+          "CERNION_PROCESS_TOKEN"
         ]
       }
     ]
@@ -75,6 +88,26 @@
       "sensitive": true,
       "advanced": true
     },
+    "processBearerToken": {
+      "label": "Cernion Process Token",
+      "placeholder": "${CERNION_PROCESS_TOKEN}",
+      "help": "Separate token for Process Intake. Required only for cernion_prepare_process_intent.",
+      "sensitive": true,
+      "advanced": true
+    },
+    "processBearerTokenEnv": {
+      "label": "Process Token Env Var",
+      "placeholder": "CERNION_PROCESS_TOKEN",
+      "help": "Optional environment variable name for the process-intake token.",
+      "advanced": true
+    },
+    "processBearerTokenFile": {
+      "label": "Process Token File",
+      "placeholder": "/path/to/cernion-process-token",
+      "help": "Optional local file containing the process-intake token. Prefer mode 0600.",
+      "sensitive": true,
+      "advanced": true
+    },
     "timeoutMs": {
       "label": "Request Timeout",
       "placeholder": "15000",
@@ -84,6 +117,9 @@
   },
   "contracts": {
     "tools": [
+      "cernion_route_evidence",
+      "cernion_execute_evidence_endpoint",
+      "cernion_prepare_process_intent",
       "cernion_ask",
       "cernion_sidecar_descriptor",
       "cernion_sidecar_tools",

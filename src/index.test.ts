@@ -2,10 +2,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import entry, {
   buildQueryPath,
   buildUrl,
+  executeEvidenceEndpointPlan,
   executeRestExecutionPlan,
   requireConfig,
+  requireProcessConfig,
   requestCernion,
+  requestCernionProcess,
+  routeEvidence,
   scrubSecretValues,
+  validateEvidenceEndpointPlan,
   validateRestExecutionPlan,
 } from "./index.js";
 import { getToolPluginMetadata } from "openclaw/plugin-sdk/tool-plugin";
@@ -14,6 +19,9 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 const EXPECTED_TOOLS = [
+  "cernion_route_evidence",
+  "cernion_execute_evidence_endpoint",
+  "cernion_prepare_process_intent",
   "cernion_ask",
   "cernion_sidecar_descriptor",
   "cernion_sidecar_tools",
@@ -31,6 +39,8 @@ describe("cernion-energy-sidecar", () => {
     delete process.env.CERNION_BASE_URL;
     delete process.env.CERNION_READONLY_TOKEN;
     delete process.env.CERNION_READONLY_TOKEN_FILE;
+    delete process.env.CERNION_PROCESS_TOKEN;
+    delete process.env.CERNION_PROCESS_TOKEN_FILE;
   });
 
   it("declares tool metadata", () => {
@@ -60,6 +70,24 @@ describe("cernion-energy-sidecar", () => {
     });
   });
 
+  it("keeps process-intake credentials separate from read-only credentials", () => {
+    process.env.CERNION_BASE_URL = "https://dev.cernion.example";
+    process.env.CERNION_PROCESS_TOKEN = "ck_process_token";
+
+    expect(requireProcessConfig({})).toMatchObject({
+      baseUrl: "https://dev.cernion.example",
+      bearerToken: "ck_process_token",
+    });
+
+    delete process.env.CERNION_PROCESS_TOKEN;
+    expect(() =>
+      requireProcessConfig({
+        baseUrl: "https://cernion.example",
+        bearerToken: "ck_readonly_token",
+      }),
+    ).toThrow(/process-intake bearer token/);
+  });
+
   it("resolves the bearer token from a restricted local token file", () => {
     const dir = mkdtempSync(join(tmpdir(), "cernion-sidecar-"));
     const tokenPath = join(dir, "token");
@@ -74,6 +102,27 @@ describe("cernion-energy-sidecar", () => {
       ).toEqual({
         baseUrl: "https://cernion.example",
         bearerToken: "ck_file_token",
+        timeoutMs: 15000,
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("resolves the process token from a restricted env-style token file", () => {
+    const dir = mkdtempSync(join(tmpdir(), "cernion-sidecar-"));
+    const tokenPath = join(dir, "process-token");
+    try {
+      writeFileSync(tokenPath, "CERNION_PROCESS_TOKEN=ck_process_file_token\n", { mode: 0o600 });
+
+      expect(
+        requireProcessConfig({
+          baseUrl: "https://cernion.example/",
+          processBearerTokenFile: tokenPath,
+        }),
+      ).toEqual({
+        baseUrl: "https://cernion.example",
+        bearerToken: "ck_process_file_token",
         timeoutMs: 15000,
       });
     } finally {
@@ -319,6 +368,206 @@ describe("cernion-energy-sidecar", () => {
           path: "/api/assets/solar",
         },
       },
+    });
+  });
+
+  it("routes evidence through the backend Evidence Router contract", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      text: async () =>
+        JSON.stringify({
+          success: true,
+          resolved: { kind: "evidence_plan", source: "evidence_router" },
+          requiredEvidenceTypes: ["time_series"],
+          recommendedEndpoints: [
+            {
+              purpose: "co2_intensity_time_series",
+              method: "POST",
+              path: "/api/energy-market/co2-intensity",
+              query: { location: "69168", forecast: true },
+              resultKind: "time_series",
+              policy: { readOnly: true, sideEffects: "none" },
+            },
+          ],
+        }),
+    } as Response);
+
+    const result = await routeEvidence(
+      {
+        baseUrl: "https://cernion.example",
+        bearerToken: "ck_readonly_secret",
+      },
+      {
+        question: "Wie hoch ist die CO2-Intensität in den nächsten 24 Stunden in 69168?",
+        context: { location: "69168" },
+      },
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://cernion.example/api/evidence-router/route",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          question: "Wie hoch ist die CO2-Intensität in den nächsten 24 Stunden in 69168?",
+          context: { location: "69168" },
+        }),
+      }),
+    );
+    expect(result).toMatchObject({
+      success: true,
+      resolved: { kind: "evidence_plan" },
+      recommendedEndpoints: [
+        {
+          path: "/api/energy-market/co2-intensity",
+          resultKind: "time_series",
+        },
+      ],
+    });
+  });
+
+  it("validates Evidence Router endpoint recommendations separately from GET-only ask plans", () => {
+    expect(
+      validateEvidenceEndpointPlan({
+        method: "POST",
+        path: "/api/energy-market/co2-intensity",
+        query: { location: "69168", forecast: true },
+        resultKind: "time_series",
+        policy: { readOnly: true, sideEffects: "none" },
+      }),
+    ).toEqual({
+      method: "POST",
+      path: "/api/energy-market/co2-intensity",
+      params: { location: "69168", forecast: true },
+      body: { location: "69168", forecast: true },
+    });
+
+    expect(() =>
+      validateEvidenceEndpointPlan({
+        method: "POST",
+        path: "/api/energy-market/co2-intensity",
+        query: { location: "69168" },
+        policy: { sideEffects: "none" },
+      }),
+    ).toThrow(/readOnly=true/);
+    expect(() =>
+      validateEvidenceEndpointPlan({
+        method: "POST",
+        path: "/api/copilot-process/intents",
+        policy: { readOnly: true, sideEffects: "none" },
+      }),
+    ).toThrow(/Process Intake/);
+    expect(() =>
+      validateEvidenceEndpointPlan({
+        method: "PUT",
+        path: "/api/energy-market/co2-intensity",
+        policy: { readOnly: true, sideEffects: "none" },
+      }),
+    ).toThrow(/GET or POST/);
+  });
+
+  it("executes POST evidence endpoints recommended by the Evidence Router", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      text: async () =>
+        JSON.stringify({
+          success: true,
+          forecast_next_24h_gco2eq_kwh: [{ hour: "10:00", value: 310 }],
+          echoed: "ck_readonly_secret",
+        }),
+    } as Response);
+
+    const result = await executeEvidenceEndpointPlan(
+      {
+        baseUrl: "https://cernion.example",
+        bearerToken: "ck_readonly_secret",
+      },
+      {
+        method: "POST",
+        path: "/api/energy-market/co2-intensity",
+        query: { location: "69168", forecast: true },
+        resultKind: "time_series",
+        policy: { readOnly: true, sideEffects: "none" },
+      },
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://cernion.example/api/energy-market/co2-intensity",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({ location: "69168", forecast: true }),
+        headers: expect.objectContaining({
+          authorization: "Bearer ck_readonly_secret",
+        }),
+      }),
+    );
+    expect(result).toEqual({
+      success: true,
+      forecast_next_24h_gco2eq_kwh: [{ hour: "10:00", value: 310 }],
+      echoed: "[redacted]",
+    });
+  });
+
+  it("prepares process intake with a dedicated process token and only returns the receipt", async () => {
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      text: async () =>
+        JSON.stringify({
+          success: true,
+          resolved: { kind: "process_intake", source: "process_intent_store" },
+          receipt: {
+            intentId: "intent-123",
+            status: "pending_confirmation",
+            requiresHumanConfirmation: true,
+          },
+          echoed: "ck_process_secret",
+        }),
+    } as Response);
+
+    const result = await requestCernionProcess(
+      {
+        baseUrl: "https://cernion.example",
+        processBearerToken: "ck_process_secret",
+      },
+      "/api/copilot-process/intents",
+      {
+        method: "POST",
+        body: {
+          operationFamily: "customer_master_data_correction",
+          proposedAction: "correct_metering_point_address",
+          payload: { targetId: "MP-12345" },
+        },
+      },
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://cernion.example/api/copilot-process/intents",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          operationFamily: "customer_master_data_correction",
+          proposedAction: "correct_metering_point_address",
+          payload: { targetId: "MP-12345" },
+        }),
+        headers: expect.objectContaining({
+          authorization: "Bearer ck_process_secret",
+        }),
+      }),
+    );
+    expect(result).toEqual({
+      success: true,
+      resolved: { kind: "process_intake", source: "process_intent_store" },
+      receipt: {
+        intentId: "intent-123",
+        status: "pending_confirmation",
+        requiresHumanConfirmation: true,
+      },
+      echoed: "[redacted]",
     });
   });
 

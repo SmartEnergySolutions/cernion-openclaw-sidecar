@@ -3,6 +3,9 @@ type PluginConfig = {
     bearerToken?: string;
     bearerTokenEnv?: string;
     bearerTokenFile?: string;
+    processBearerToken?: string;
+    processBearerTokenEnv?: string;
+    processBearerTokenFile?: string;
     allowRestProxy?: boolean;
     timeoutMs?: number;
 };
@@ -18,7 +21,17 @@ type RestExecutionPlan = {
     query?: Record<string, unknown>;
     policy?: Record<string, unknown>;
 };
+type EvidenceEndpointPlan = RestExecutionPlan & {
+    body?: Record<string, unknown>;
+    resultKind?: string;
+    purpose?: string;
+};
 declare function requireConfig(config: PluginConfig): {
+    baseUrl: string;
+    bearerToken: string;
+    timeoutMs: number;
+};
+declare function requireProcessConfig(config: PluginConfig): {
     baseUrl: string;
     bearerToken: string;
     timeoutMs: number;
@@ -31,9 +44,21 @@ declare function validateRestExecutionPlan(plan: RestExecutionPlan): {
     path: string;
     params: Record<string, unknown>;
 };
+declare function validateEvidenceEndpointPlan(plan: EvidenceEndpointPlan): {
+    method: "GET" | "POST";
+    path: string;
+    params: Record<string, unknown>;
+    body?: Record<string, unknown>;
+};
 declare function executeRestExecutionPlan(config: PluginConfig, plan: RestExecutionPlan, signal?: AbortSignal): Promise<unknown>;
+declare function routeEvidence(config: PluginConfig, request: {
+    question: string;
+    context?: Record<string, unknown>;
+}, signal?: AbortSignal): Promise<unknown>;
+declare function executeEvidenceEndpointPlan(config: PluginConfig, plan: EvidenceEndpointPlan, signal?: AbortSignal): Promise<unknown>;
 declare function requestCernion(config: PluginConfig, path: string, options?: RequestOptions): Promise<unknown>;
+declare function requestCernionProcess(config: PluginConfig, path: string, options?: RequestOptions): Promise<unknown>;
 declare function scrubSecretValues(value: unknown, token?: string): unknown;
 declare const _default: import("openclaw/plugin-sdk/tool-plugin").DefinedToolPluginEntry;
 export default _default;
-export { buildQueryPath, buildUrl, executeRestExecutionPlan, isRestProxyAllowed, requireConfig, requestCernion, scrubSecretValues, validateRestExecutionPlan, };
+export { buildQueryPath, buildUrl, executeEvidenceEndpointPlan, executeRestExecutionPlan, isRestProxyAllowed, requireConfig, requireProcessConfig, requestCernion, requestCernionProcess, routeEvidence, scrubSecretValues, validateEvidenceEndpointPlan, validateRestExecutionPlan, };

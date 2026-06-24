@@ -47,6 +47,7 @@ Examples:
 
 - Zielnetzplanung or ZNP prechecks
 - voltage-level hypotheses for PV, BESS, HPC charging, or industrial loads
+- data-center and other large-load siting questions
 - likely critical HS/MS/MS/NS areas
 - substations, lines, visible grid topology, or site context
 - fNAV or flexible connection assessment
@@ -69,6 +70,19 @@ State the OSM evidence gap and continue by narrowing the question to plausible
 candidate municipalities or known grid nodes from Cernion Fachwissen, evidence
 routing, or explicitly named external sources. Then run the OSM/grid-context
 check on those narrower places.
+
+For data centers or other large-load projects, use this evidence hierarchy:
+
+1. Explicit grid-connection availability maps or published connection capacity
+2. Operator-confirmed Anschlusskapazität or grid-connection study evidence
+3. Concrete substation, voltage-level, transformer, or line evidence
+4. Generic grid-expansion projects
+5. OSM proximity
+
+Do not rank a site highly merely because a substation or corridor is being
+expanded. Ausbau is a signal to investigate, not proof that capacity is
+available. If an availability map marks a node unavailable, that outweighs a
+generic positive statement about the local expansion project.
 
 Treat OSM grid context as concrete hypothesis evidence. It can make a ZNP answer
 more specific about likely Spannungsebenen, Umspannwerke, Leitungskorridore, and

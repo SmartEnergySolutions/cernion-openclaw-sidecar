@@ -215,6 +215,13 @@ Expected behaviour:
    claim available capacity, switching state, protection settings, complete
    ownership, or a final Netzverträglichkeitsprüfung without separate evidence.
 
+For data-center or other large-load siting questions, the answer should use a
+stricter evidence hierarchy. Explicit grid-connection availability maps,
+published connection capacity, or operator-confirmed Anschlusskapazität outrank
+generic grid-expansion projects and OSM proximity. A substation upgrade is a
+reason to investigate a location, not proof that large-load connection capacity
+is available.
+
 ## Smoke Test
 
 To verify the container and sidecar connection without using the browser:

@@ -54,7 +54,8 @@ Edit `docker/.env`:
 ```dotenv
 CERNION_BASE_URL=https://cernion.example
 CERNION_TOKEN=ck_your_cernion_token_here
-OPENCLAW_MODEL=google/gemini-2.5-flash
+OPENCLAW_MODEL=google/gemini-3.1-pro-preview
+OPENCLAW_THINKING=adaptive
 OPENCLAW_CONTROLUI_PORT=19101
 OPENCLAW_GATEWAY_TOKEN=cernion-local-demo
 ```
@@ -67,9 +68,15 @@ other OpenClaw-supported provider settings can live in the same file.
 `OPENCLAW_MODEL` selects the model for the demo agent. If it is omitted, the
 container auto-selects a matching default for common provider keys:
 
-- `GOOGLE_API_KEY` or `GEMINI_API_KEY` -> `google/gemini-2.5-flash`
+- `GOOGLE_API_KEY` or `GEMINI_API_KEY` -> `google/gemini-3.1-pro-preview`
 - `ANTHROPIC_API_KEY` -> `anthropic/claude-sonnet-4-6`
 - `OPENAI_API_KEY` -> `openai/gpt-5.5`
+
+`OPENCLAW_THINKING` controls the demo agent's thinking level. For the
+Meckesheim example, keep `adaptive` or use a stronger level if your selected
+model supports it. Smaller flash models and low/adaptive reasoning can be fine
+for connection smoke tests, but they may answer from generic web-like priors
+instead of doing enough tool-backed aggregation.
 
 The Sidecar itself does not depend on a specific model provider.
 
@@ -117,6 +124,18 @@ The important architecture boundary is:
 Cernion supplies evidence and policy.
 OpenClaw turns that evidence into the final user answer.
 ```
+
+Model choice matters for this example. With a fast flash model, the agent may
+produce a plausible but shallow answer from partial public facts, for example by
+using old annual consumption estimates and a few named PV examples instead of
+aggregating the full local installation register. A stronger model with
+`OPENCLAW_THINKING=adaptive`, such as `google/gemini-3.1-pro-preview`, is a
+better first-run setting because it is more likely to:
+
+- ask the Cernion Sidecar for complete local evidence,
+- distinguish installed generation from storage,
+- compare momentary, daily, and annual self-supply separately,
+- explain remaining uncertainty instead of treating partial evidence as final.
 
 ## Smoke Test
 
@@ -176,7 +195,8 @@ docker compose --env-file docker/.env -f docker/compose.yml run --rm openclaw-ce
 | `CERNION_READONLY_TOKEN` | strict setup | Token used for read-only evidence calls. |
 | `CERNION_PROCESS_TOKEN` | optional | Token used only for `cernion_prepare_process_intent`. |
 | `CERNION_SIDECAR_TIMEOUT_MS` | no | HTTP timeout for Cernion calls, default `15000`. |
-| `OPENCLAW_MODEL` | recommended | Demo-agent model id, for example `google/gemini-2.5-flash`. |
+| `OPENCLAW_MODEL` | recommended | Demo-agent model id, for example `google/gemini-3.1-pro-preview`. |
+| `OPENCLAW_THINKING` | recommended | Demo-agent thinking level: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `adaptive`, or `max`; recommended `adaptive`. |
 | `OPENCLAW_CONTROLUI_PORT` | no | Host port for Control UI, default `19101`. |
 | `OPENCLAW_GATEWAY_TOKEN` | no | Local Gateway token for Control UI login, default `cernion-local-demo`. |
 | provider env vars | recommended | Any model-provider environment variables supported by OpenClaw, for example `GOOGLE_API_KEY`, `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, or `OPENAI_API_KEY`. |

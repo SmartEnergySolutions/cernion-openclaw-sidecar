@@ -56,6 +56,16 @@ const config = {
 const sidecarConfig = config.plugins.entries["cernion-energy-sidecar"].config;
 const envRef = (id) => ({ source: "env", provider: "default", id });
 const providers = {};
+const allowedThinkingLevels = new Set([
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "adaptive",
+  "max",
+]);
 
 const googleApiKeyEnv = process.env.GOOGLE_API_KEY
   ? "GOOGLE_API_KEY"
@@ -89,7 +99,7 @@ let primaryModel =
 
 if (!primaryModel) {
   if (googleApiKeyEnv) {
-    primaryModel = "google/gemini-2.5-flash";
+    primaryModel = "google/gemini-3.1-pro-preview";
   } else if (process.env.ANTHROPIC_API_KEY) {
     primaryModel = "anthropic/claude-sonnet-4-6";
   } else if (process.env.OPENAI_API_KEY) {
@@ -112,6 +122,25 @@ if (primaryModel) {
       },
     },
   };
+}
+
+const thinkingDefault =
+  process.env.OPENCLAW_THINKING ||
+  process.env.OPENCLAW_THINKING_LEVEL ||
+  "";
+
+if (thinkingDefault) {
+  if (!allowedThinkingLevels.has(thinkingDefault)) {
+    throw new Error(
+      `Unsupported OPENCLAW_THINKING value: ${thinkingDefault}. Use one of: ${[
+        ...allowedThinkingLevels,
+      ].join(", ")}`,
+    );
+  }
+
+  config.agents = config.agents || {};
+  config.agents.defaults = config.agents.defaults || {};
+  config.agents.defaults.thinkingDefault = thinkingDefault;
 }
 
 if (process.env.CERNION_READONLY_TOKEN) {

@@ -334,12 +334,15 @@ function assessDomainKnowledgeEvidence(query, result) {
     const reasons = [];
     if (hits.length === 0)
         reasons.push("Knowledge RAG returned no result chunks.");
-    if (routingCardCount > 0)
-        reasons.push("One or more hits are routing/synonym strategy cards, not primary fachliche sources.");
-    if (weakOrOffTopicCount > 0)
-        reasons.push("One or more hits lack strong source metadata, query match, or semantic score.");
-    if (strongEvidenceCount === 0)
-        reasons.push("No strong sourced fachliche evidence chunk was found for the query.");
+    if (routingCardCount > 0) {
+        reasons.push("One or more hits are Cernion routing/synonym strategy cards, not primary-source support for hard obligations.");
+    }
+    if (weakOrOffTopicCount > 0) {
+        reasons.push("One or more hits lack source metadata, query match, or semantic score for primary-source support.");
+    }
+    if (strongEvidenceCount === 0) {
+        reasons.push("No strong primary/source-backed evidence chunk was found for a hard legal or procedural claim.");
+    }
     let evidenceAdequacy = "low";
     if (strongEvidenceCount >= 2)
         evidenceAdequacy = "high";
@@ -349,8 +352,9 @@ function assessDomainKnowledgeEvidence(query, result) {
         ? "The assistant may synthesize a fachliche answer, but should cite or name the Cernion evidence used and keep operational status separate."
         : evidenceAdequacy === "medium"
             ? "The assistant may answer only the points directly supported by the sourced Cernion evidence and should state remaining evidence gaps."
-            : "The assistant must not present a legal or procedural answer as fully evidenced by Cernion. State that Cernion returned insufficient primary fachliche evidence, use routing-card content only as orientation, and avoid filling gaps from model memory or web search unless explicitly requested.";
+            : "The assistant must not present a legal or procedural answer as fully evidenced by Cernion primary sources. State that Cernion returned useful domain or strategy knowledge, but primary-source support for hard obligations is insufficient. Use routing-card content as orientation and avoid filling gaps from model memory or web search unless explicitly requested.";
     return {
+        assessmentScope: "primary_source_support",
         evidenceAdequacy,
         strongEvidenceCount,
         routingCardCount,
@@ -547,7 +551,7 @@ export default defineToolPlugin({
         tool({
             name: "cernion_query_domain_knowledge",
             label: "Query Cernion Fachwissen",
-            description: "Query Cernion Knowledge RAG for read-only regulatory, procedural, and fachliche domain knowledge before using web search or operative backend hydration. Use this for laws, BNetzA guidance, Verfahrensanweisungen, roles, obligations, definitions, and consulting-at-the-job context. Treat the returned evidenceAssessment as binding: if evidenceAdequacy is low, do not answer legal/procedural duties as settled from Cernion evidence; say the Cernion Fachwissen evidence is insufficient and avoid filling gaps from model memory or web search unless the user explicitly asks.",
+            description: "Query Cernion Knowledge RAG for read-only regulatory, procedural, and fachliche domain knowledge before using web search or operative backend hydration. Use this for laws, BNetzA guidance, Verfahrensanweisungen, roles, obligations, definitions, and consulting-at-the-job context. Treat the returned evidenceAssessment as binding primary-source support, not as a judgment on Cernion's domain knowledge quality: if evidenceAdequacy is low, do not answer legal/procedural duties as settled from Cernion primary sources; say Cernion returned useful domain/strategy knowledge but not enough primary-source support for hard obligations, and avoid filling gaps from model memory or web search unless the user explicitly asks.",
             parameters: Type.Object({
                 queryType: Type.Optional(Type.String({ description: "Knowledge RAG mode: semantic, scroll, fetch, or collection_info. Defaults to semantic." })),
                 query: Type.Optional(Type.String({ description: "Natural-language fachliche/regulatory knowledge question. Required for semantic lookup." })),

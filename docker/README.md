@@ -174,11 +174,12 @@ Expected behaviour:
 1. OpenClaw first uses `cernion_query_domain_knowledge` to retrieve Cernion
    Fachwissen such as regulatory text, BNetzA guidance, procedures, roles, and
    obligations.
-2. The returned `evidenceAssessment` controls answer discipline. If
-   `evidenceAdequacy=low`, OpenClaw should say that Cernion did not return
-   enough primary fachliche evidence for a settled legal/procedural answer. A
-   strategy or synonym card is only routing context, not a source for hard
-   obligations.
+2. The returned `evidenceAssessment` controls answer discipline for
+   primary-source support. It is not a judgment on the value of Cernion
+   Fachwissen. If `evidenceAdequacy=low`, OpenClaw should say that Cernion
+   returned useful domain/strategy knowledge, but not enough primary-source
+   support for hard legal/procedural obligations. A strategy or synonym card is
+   orientation, not a source for hard obligations.
 3. Only after that should it use operational Cernion evidence when the concrete
    job context requires it, for example grid-operator readiness, metering,
    master-data quality, or missing BDEW/grid-operator identifiers.

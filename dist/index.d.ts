@@ -41,6 +41,7 @@ type DomainKnowledgeQuery = {
     maxWaitMs?: number;
 };
 type DomainKnowledgeEvidenceAssessment = {
+    assessmentScope: "primary_source_support";
     evidenceAdequacy: "low" | "medium" | "high";
     strongEvidenceCount: number;
     routingCardCount: number;

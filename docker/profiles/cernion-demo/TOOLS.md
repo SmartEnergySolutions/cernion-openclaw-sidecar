@@ -20,7 +20,7 @@ Use:
 
 Do not use web search as the first source for Cernion-owned domain knowledge.
 
-If `evidenceAdequacy=low`, say that Cernion did not return enough primary fachliche evidence for a settled answer. Do not fill the missing regulatory detail from model memory.
+If `evidenceAdequacy=low`, say that Cernion returned useful domain/strategy knowledge, but not enough primary-source support for a settled legal or procedural obligation. Do not fill the missing regulatory detail from model memory.
 
 ## Data And Analytics Questions
 

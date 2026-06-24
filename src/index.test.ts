@@ -553,6 +553,7 @@ describe("cernion-energy-sidecar", () => {
         resultUrl: "/api/jobs/job-123/result",
       },
       evidenceAssessment: {
+        assessmentScope: "primary_source_support",
         evidenceAdequacy: "medium",
         strongEvidenceCount: 1,
         routingCardCount: 0,
@@ -608,18 +609,19 @@ describe("cernion-energy-sidecar", () => {
         },
       }),
     ).toEqual({
+      assessmentScope: "primary_source_support",
       evidenceAdequacy: "low",
       strongEvidenceCount: 0,
       routingCardCount: 1,
       weakOrOffTopicCount: 1,
       topScore: 0.6,
       reasons: [
-        "One or more hits are routing/synonym strategy cards, not primary fachliche sources.",
-        "One or more hits lack strong source metadata, query match, or semantic score.",
-        "No strong sourced fachliche evidence chunk was found for the query.",
+        "One or more hits are Cernion routing/synonym strategy cards, not primary-source support for hard obligations.",
+        "One or more hits lack source metadata, query match, or semantic score for primary-source support.",
+        "No strong primary/source-backed evidence chunk was found for a hard legal or procedural claim.",
       ],
       answerGuidance:
-        "The assistant must not present a legal or procedural answer as fully evidenced by Cernion. State that Cernion returned insufficient primary fachliche evidence, use routing-card content only as orientation, and avoid filling gaps from model memory or web search unless explicitly requested.",
+        "The assistant must not present a legal or procedural answer as fully evidenced by Cernion primary sources. State that Cernion returned useful domain or strategy knowledge, but primary-source support for hard obligations is insufficient. Use routing-card content as orientation and avoid filling gaps from model memory or web search unless explicitly requested.",
     });
   });
 

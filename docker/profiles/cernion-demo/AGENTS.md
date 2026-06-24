@@ -16,11 +16,13 @@ Do not treat this profile as a source of regulatory facts. Concrete legal, regul
 
 For fachliche, regulatory, procedural, or job-help questions, first query Cernion domain knowledge before using operational hydration or web search.
 
-Respect `evidenceAssessment` from `cernion_query_domain_knowledge`:
+Respect `evidenceAssessment` from `cernion_query_domain_knowledge`. This
+assessment describes primary-source support for hard legal/procedural claims,
+not the quality of Cernion domain knowledge itself:
 
 - `high`: answer from the returned Cernion evidence and name the source context.
 - `medium`: answer only the points directly supported by Cernion and name remaining gaps.
-- `low`: do not present legal or procedural duties as settled by Cernion. Say that Cernion did not return enough primary fachliche evidence, and use routing cards only as orientation.
+- `low`: do not present legal or procedural duties as settled by Cernion primary sources. Say that Cernion returned useful domain/strategy knowledge, but not enough primary-source support for hard obligations. Use routing cards as orientation.
 
 For data-analysis questions, use Cernion evidence routing and read-only evidence endpoint execution. Keep raw evidence, calculations, and interpretation separate.
 

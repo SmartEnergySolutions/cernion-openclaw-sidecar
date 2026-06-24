@@ -7,9 +7,17 @@ const timeoutMs = Number(process.env.CERNION_SIDECAR_TIMEOUT_MS || 15000);
 
 const config = {
   baseUrl,
-  bearerTokenFile,
   timeoutMs,
 };
+
+if (process.env.CERNION_READONLY_TOKEN || process.env.CERNION_TOKEN) {
+  if (!process.env.CERNION_READONLY_TOKEN && process.env.CERNION_TOKEN) {
+    process.env.CERNION_READONLY_TOKEN = process.env.CERNION_TOKEN;
+  }
+  config.bearerTokenEnv = "CERNION_READONLY_TOKEN";
+} else {
+  config.bearerTokenFile = bearerTokenFile;
+}
 
 function assertNoSecretEcho(value) {
   const serialized = JSON.stringify(value);

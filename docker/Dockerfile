@@ -1,12 +1,11 @@
 FROM node:24-bookworm-slim
 
-ARG OPENCLAW_VERSION=2026.6.9-beta.1
+ARG OPENCLAW_VERSION=2026.6.10
 
 ENV NODE_ENV=production \
-    OPENCLAW_PROFILE=sidecar-it \
+    OPENCLAW_PROFILE=cernion-demo \
     OPENCLAW_GATEWAY_PORT=19101 \
     CERNION_BASE_URL=http://10.0.0.8:3900 \
-    CERNION_READONLY_TOKEN_FILE=/run/secrets/cernion-readonly-token \
     CERNION_SIDECAR_TIMEOUT_MS=15000
 
 RUN apt-get update \

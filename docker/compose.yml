@@ -23,27 +23,5 @@ services:
       - openclaw-cernion-home:/home/node
     command: ["gateway"]
 
-  sidecar-it:
-    build:
-      context: ..
-      dockerfile: docker/Dockerfile
-    image: cernion-openclaw-sidecar-openclaw:local
-    env_file:
-      - path: .env
-        required: false
-    environment:
-      OPENCLAW_PROFILE: ${OPENCLAW_PROFILE:-cernion-demo}
-      OPENCLAW_GATEWAY_PORT: "19101"
-      OPENCLAW_CONTROLUI_PORT: ${OPENCLAW_CONTROLUI_PORT:-19101}
-      OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:-cernion-local-demo}
-      CERNION_BASE_URL: ${CERNION_BASE_URL:?Set CERNION_BASE_URL to your Cernion Energy Tools base URL}
-      CERNION_TOKEN: ${CERNION_TOKEN:-}
-      CERNION_READONLY_TOKEN: ${CERNION_READONLY_TOKEN:-}
-      CERNION_PROCESS_TOKEN: ${CERNION_PROCESS_TOKEN:-}
-      CERNION_SIDECAR_TIMEOUT_MS: ${CERNION_SIDECAR_TIMEOUT_MS:-15000}
-    volumes:
-      - openclaw-cernion-home:/home/node
-    command: ["test"]
-
 volumes:
   openclaw-cernion-home:

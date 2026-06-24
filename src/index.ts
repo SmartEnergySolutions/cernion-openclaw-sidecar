@@ -186,6 +186,20 @@ function buildQueryPath(path: string, params: Record<string, unknown> = {}): str
   return `${path}${separator}${queryParams.toString()}`;
 }
 
+function combineAbortSignals(signals: AbortSignal[]): AbortSignal {
+  const activeSignals = signals.filter(Boolean);
+  if (activeSignals.length === 1) return activeSignals[0];
+  const alreadyAborted = activeSignals.find((signal) => signal.aborted);
+  if (alreadyAborted) return alreadyAborted;
+
+  const controller = new AbortController();
+  const abort = () => controller.abort();
+  for (const signal of activeSignals) {
+    signal.addEventListener("abort", abort, { once: true });
+  }
+  return controller.signal;
+}
+
 function isRestProxyAllowed(config: PluginConfig): boolean {
   if (config.allowRestProxy !== undefined) return config.allowRestProxy;
   const value = (process.env.CERNION_ALLOW_REST_PROXY || "").trim().toLowerCase();
@@ -799,7 +813,7 @@ async function requestCernion(config: PluginConfig, path: string, options: Reque
   const { baseUrl, bearerToken, timeoutMs } = requireConfig(config);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  const signal = options.signal || controller.signal;
+  const signal = combineAbortSignals(options.signal ? [options.signal, controller.signal] : [controller.signal]);
 
   try {
     const response = await fetch(buildUrl(baseUrl, path), {
@@ -838,7 +852,7 @@ async function requestCernionProcess(config: PluginConfig, path: string, options
   const { baseUrl, bearerToken, timeoutMs } = requireProcessConfig(config);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
-  const signal = options.signal || controller.signal;
+  const signal = combineAbortSignals(options.signal ? [options.signal, controller.signal] : [controller.signal]);
 
   try {
     const response = await fetch(buildUrl(baseUrl, path), {

@@ -43,6 +43,7 @@ const EXPECTED_TOOLS = [
 describe("cernion-energy-sidecar", () => {
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.useRealTimers();
     delete process.env.CERNION_BASE_URL;
     delete process.env.CERNION_READONLY_TOKEN;
     delete process.env.CERNION_READONLY_TOKEN_FILE;
@@ -1053,6 +1054,32 @@ describe("cernion-energy-sidecar", () => {
       }),
     );
     expect(result).toEqual({ success: true, data: [] });
+  });
+
+  it("honors the Sidecar timeout even when OpenClaw supplies an abort signal", async () => {
+    const externalController = new AbortController();
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      (_input, init) =>
+        new Promise((_resolve, reject) => {
+          const signal = init?.signal as AbortSignal | undefined;
+          signal?.addEventListener("abort", () => reject(new DOMException("This operation was aborted", "AbortError")), {
+            once: true,
+          });
+        }) as Promise<Response>,
+    );
+
+    const request = requestCernion(
+      {
+        baseUrl: "https://cernion.example",
+        bearerToken: "ck_readonly_secret",
+        timeoutMs: 10,
+      },
+      "/api/osm-geo/substation-finder",
+      { method: "POST", body: { location: "Rhein-Neckar-Kreis" }, signal: externalController.signal },
+    );
+
+    await expect(request).rejects.toThrow(/aborted/i);
+    expect(externalController.signal.aborted).toBe(false);
   });
 
   it("sends authenticated requests to the new manifest resolve endpoints", async () => {

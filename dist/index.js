@@ -83,6 +83,20 @@ function buildQueryPath(path, params = {}) {
     const separator = path.includes("?") ? "&" : "?";
     return `${path}${separator}${queryParams.toString()}`;
 }
+function combineAbortSignals(signals) {
+    const activeSignals = signals.filter(Boolean);
+    if (activeSignals.length === 1)
+        return activeSignals[0];
+    const alreadyAborted = activeSignals.find((signal) => signal.aborted);
+    if (alreadyAborted)
+        return alreadyAborted;
+    const controller = new AbortController();
+    const abort = () => controller.abort();
+    for (const signal of activeSignals) {
+        signal.addEventListener("abort", abort, { once: true });
+    }
+    return controller.signal;
+}
 function isRestProxyAllowed(config) {
     if (config.allowRestProxy !== undefined)
         return config.allowRestProxy;
@@ -590,7 +604,7 @@ async function requestCernion(config, path, options = {}) {
     const { baseUrl, bearerToken, timeoutMs } = requireConfig(config);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
-    const signal = options.signal || controller.signal;
+    const signal = combineAbortSignals(options.signal ? [options.signal, controller.signal] : [controller.signal]);
     try {
         const response = await fetch(buildUrl(baseUrl, path), {
             method: options.method || "GET",
@@ -626,7 +640,7 @@ async function requestCernionProcess(config, path, options = {}) {
     const { baseUrl, bearerToken, timeoutMs } = requireProcessConfig(config);
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), timeoutMs);
-    const signal = options.signal || controller.signal;
+    const signal = combineAbortSignals(options.signal ? [options.signal, controller.signal] : [controller.signal]);
     try {
         const response = await fetch(buildUrl(baseUrl, path), {
             method: options.method || "GET",

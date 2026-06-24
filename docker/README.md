@@ -13,6 +13,8 @@ settings are supplied through environment variables.
 - OpenClaw Gateway and browser Control UI
 - this repository's `cernion-energy-sidecar` plugin
 - an isolated OpenClaw profile, default `cernion-demo`
+- a Cernion demo workspace profile copied from
+  `docker/profiles/cernion-demo`
 - an isolated container home mounted in the Docker volume
   `openclaw-cernion-home`
 
@@ -56,6 +58,8 @@ CERNION_BASE_URL=https://cernion.example
 CERNION_TOKEN=ck_your_cernion_token_here
 OPENCLAW_MODEL=google/gemini-3.1-pro-preview
 OPENCLAW_THINKING=adaptive
+OPENCLAW_PROFILE=cernion-demo
+OPENCLAW_WORKSPACE=/home/node/cernion-demo-workspace
 OPENCLAW_CONTROLUI_PORT=19101
 OPENCLAW_GATEWAY_TOKEN=cernion-local-demo
 ```
@@ -79,6 +83,25 @@ for connection smoke tests, but they may answer from generic web-like priors
 instead of doing enough tool-backed aggregation.
 
 The Sidecar itself does not depend on a specific model provider.
+
+## Demo Workspace Profile
+
+The Docker demo ships a Cernion-specific workspace profile under
+`docker/profiles/cernion-demo`:
+
+- `AGENTS.md`: general demo role, evidence discipline, and answer structure
+- `SOUL.md`: Cernion-focused assistant identity
+- `TOOLS.md`: recommended Cernion tool order for domain knowledge, evidence,
+  operational status, and process-intake use cases
+
+At container start, these files are copied into `OPENCLAW_WORKSPACE`, which
+defaults to `/home/node/cernion-demo-workspace`, and the OpenClaw profile is
+configured with `agents.defaults.workspace` pointing there. This makes the demo
+agent Cernion-aware without baking that persona into the Sidecar plugin.
+
+To use your own workspace instructions, set `OPENCLAW_WORKSPACE` to another
+container path and either mount your files there or set
+`OPENCLAW_COPY_PROFILE_FILES=false`.
 
 ## Start
 

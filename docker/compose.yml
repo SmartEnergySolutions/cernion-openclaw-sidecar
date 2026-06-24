@@ -9,6 +9,8 @@ services:
         required: false
     environment:
       OPENCLAW_PROFILE: ${OPENCLAW_PROFILE:-cernion-demo}
+      OPENCLAW_WORKSPACE: ${OPENCLAW_WORKSPACE:-/home/node/cernion-demo-workspace}
+      OPENCLAW_COPY_PROFILE_FILES: ${OPENCLAW_COPY_PROFILE_FILES:-true}
       OPENCLAW_GATEWAY_PORT: "19101"
       OPENCLAW_CONTROLUI_PORT: ${OPENCLAW_CONTROLUI_PORT:-19101}
       OPENCLAW_GATEWAY_TOKEN: ${OPENCLAW_GATEWAY_TOKEN:-cernion-local-demo}

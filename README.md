@@ -94,7 +94,8 @@ variables. No operator workspace, memory, transcripts, or personal OpenClaw
 state are mounted.
 
 See [docker/README.md](docker/README.md) for the full end-user walkthrough,
-including the Meckesheim self-supply example prompt.
+including the Cernion demo workspace profile and the Meckesheim self-supply
+example prompt.
 
 ## Local Install
 

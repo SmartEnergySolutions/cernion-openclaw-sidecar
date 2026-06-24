@@ -8,6 +8,16 @@ GATEWAY_PORT="${OPENCLAW_GATEWAY_PORT:-19101}"
 CONTROLUI_PORT="${OPENCLAW_CONTROLUI_PORT:-${GATEWAY_PORT}}"
 GATEWAY_TOKEN="${OPENCLAW_GATEWAY_TOKEN:-cernion-local-demo}"
 PLUGIN_DIR="/opt/cernion-openclaw-sidecar"
+WORKSPACE_DIR="${OPENCLAW_WORKSPACE:-/home/node/cernion-demo-workspace}"
+PROFILE_DIR="${PLUGIN_DIR}/docker/profiles/${PROFILE}"
+
+mkdir -p "${WORKSPACE_DIR}"
+
+if [[ -d "${PROFILE_DIR}" && "${OPENCLAW_COPY_PROFILE_FILES:-true}" == "true" ]]; then
+  cp -f "${PROFILE_DIR}"/*.md "${WORKSPACE_DIR}/"
+fi
+
+export OPENCLAW_WORKSPACE_DIR="${WORKSPACE_DIR}"
 
 if [[ -z "${CERNION_READONLY_TOKEN:-}" && -n "${CERNION_TOKEN:-}" ]]; then
   export CERNION_READONLY_TOKEN="${CERNION_TOKEN}"
@@ -117,11 +127,23 @@ if (Object.keys(providers).length > 0) {
 if (primaryModel) {
   config.agents = {
     defaults: {
+      workspace: process.env.OPENCLAW_WORKSPACE_DIR,
       model: {
         primary: primaryModel,
       },
     },
   };
+}
+
+if (!config.agents) {
+  config.agents = {
+    defaults: {
+      workspace: process.env.OPENCLAW_WORKSPACE_DIR,
+    },
+  };
+} else {
+  config.agents.defaults = config.agents.defaults || {};
+  config.agents.defaults.workspace = process.env.OPENCLAW_WORKSPACE_DIR;
 }
 
 const thinkingDefault =
@@ -193,6 +215,7 @@ case "${1:-gateway}" in
     echo "Control UI: ${control_ui_url}"
     echo "Gateway auth token: ${GATEWAY_TOKEN}"
     echo "Cernion base URL: ${BASE_URL}"
+    echo "Workspace profile: ${WORKSPACE_DIR}"
     echo "First question: Mich würde interessieren, ob die Gemeinde Meckesheim bereits so viel Erzeugungskapazitäten hat, dass sie unter idealen Bedingungen sich selbst versorgen könnte. Wenn nicht, wie viel Erzeugung Solar müsste zugebaut werden?"
     exec openclaw --profile "${PROFILE}" gateway run \
       --dev \

@@ -204,8 +204,9 @@ Expected behaviour:
 
 1. OpenClaw uses `cernion_query_domain_knowledge` for ZNP, §14d, fNAV, NOVA,
    and process/strategy evidence.
-2. OpenClaw uses `cernion_query_grid_context` for Cernion OSM Geo evidence:
-   substations, transformers, voltage-level hints, lines, and topology metrics.
+2. OpenClaw uses `cernion_query_grid_context` for Cernion OSM Geo evidence.
+   For a county-wide search it should start with substations and voltage-level
+   hints only; topology should be enabled only for candidate-place drill-down.
 3. OpenClaw then uses `cernion_route_evidence` and
    `cernion_execute_evidence_endpoint` for MaStR, residual load, forecasts,
    market partners, or operational status when relevant.

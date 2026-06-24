@@ -713,11 +713,18 @@ describe("cernion-energy-sidecar", () => {
   });
 
   it("normalizes OSM grid context queries and requires a scope", () => {
+    expect(normalizeGridContextQuery({ location: "Rhein-Neckar-Kreis" })).toMatchObject({
+      location: "Rhein-Neckar-Kreis",
+      includeSubstations: true,
+      includeTopology: false,
+    });
+
     expect(
       normalizeGridContextQuery({
         location: " Sinsheim ",
         voltageLevel: "MS",
         includeGraphData: true,
+        includeTopology: true,
         maxResults: 5000,
       }),
     ).toEqual({
@@ -785,6 +792,7 @@ describe("cernion-energy-sidecar", () => {
       {
         location: "Sinsheim",
         voltageLevel: "MS",
+        includeTopology: true,
         maxResults: 50,
       },
     );
@@ -857,6 +865,7 @@ describe("cernion-energy-sidecar", () => {
       },
       {
         location: "Sinsheim",
+        includeTopology: true,
       },
     );
 

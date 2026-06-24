@@ -531,7 +531,7 @@ function normalizeGridContextQuery(request: GridContextQuery): Record<string, un
   }
 
   const includeSubstations = request.includeSubstations !== false;
-  const includeTopology = request.includeTopology !== false;
+  const includeTopology = request.includeTopology === true;
   if (!includeSubstations && !includeTopology) {
     throw new Error("At least one of includeSubstations or includeTopology must be true.");
   }
@@ -926,7 +926,12 @@ export default defineToolPlugin({
         gridOperatorId: Type.Optional(Type.String({ description: "Optional MaStR/VNB grid operator id if already known." })),
         voltageLevel: Type.Optional(Type.String({ description: "Optional voltage-level filter: NS, MS, HS, or EHS." })),
         includeSubstations: Type.Optional(Type.Boolean({ description: "Call /api/osm-geo/substation-finder. Defaults to true." })),
-        includeTopology: Type.Optional(Type.Boolean({ description: "Call /api/osm-geo/grid-topology. Defaults to true." })),
+        includeTopology: Type.Optional(
+          Type.Boolean({
+            description:
+              "Call /api/osm-geo/grid-topology. Defaults to false; enable for candidate-area drill-down rather than broad county searches.",
+          }),
+        ),
         includeGeometry: Type.Optional(Type.Boolean({ description: "Include substation polygon geometry when available. Defaults to false." })),
         includeGraphData: Type.Optional(Type.Boolean({ description: "Include raw topology graph data. Defaults to false." })),
         maxResults: Type.Optional(Type.Number({ description: "Maximum returned substation records, 1..1000. Defaults to 200." })),

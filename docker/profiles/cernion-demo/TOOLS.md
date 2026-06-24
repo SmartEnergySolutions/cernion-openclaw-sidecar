@@ -58,6 +58,18 @@ Use:
 3. `cernion_route_evidence` for MaStR, residual load, forecasts, market partners, or operational backend status
 4. `cernion_execute_evidence_endpoint` for read-only plans
 
+For a broad region such as a Landkreis, first use `cernion_query_grid_context`
+with substations only. Do not request full grid topology for the whole county
+as the first step. After a small set of candidate municipalities has emerged,
+run `cernion_query_grid_context` again with `includeTopology=true` for each
+candidate or a narrow bounding box.
+
+If the broad-region OSM call degrades or times out, do not fail the answer.
+State the OSM evidence gap and continue by narrowing the question to plausible
+candidate municipalities or known grid nodes from Cernion Fachwissen, evidence
+routing, or explicitly named external sources. Then run the OSM/grid-context
+check on those narrower places.
+
 Treat OSM grid context as concrete hypothesis evidence. It can make a ZNP answer
 more specific about likely Spannungsebenen, Umspannwerke, Leitungskorridore, and
 network-area risks. It does not prove available capacity, switching state,

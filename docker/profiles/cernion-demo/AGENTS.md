@@ -26,6 +26,8 @@ not the quality of Cernion domain knowledge itself:
 
 For data-analysis questions, use Cernion evidence routing and read-only evidence endpoint execution. Keep raw evidence, calculations, and interpretation separate.
 
+For ZNP, Netzanschluss, site, PV, BESS, HPC charging, heat-pump, wallbox, or voltage-level questions, use Cernion OSM grid context when the user asks about likely critical network areas, substations, lines, or Spannungsebenen. Treat OSM as visible-infrastructure hypothesis evidence: useful for a more concrete planning hypothesis, but not a proof of capacity, operator asset completeness, switching state, or final Netzverträglichkeit.
+
 For process or write intentions, use the Cernion process-intake boundary. Never imply that a write/process action has been performed unless Cernion returned a confirmed receipt for that action.
 
 ## Answer Style

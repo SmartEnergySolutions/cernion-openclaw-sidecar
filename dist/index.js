@@ -364,6 +364,131 @@ function assessDomainKnowledgeEvidence(query, result) {
         answerGuidance,
     };
 }
+function normalizeGridContextQuery(request) {
+    const location = String(request.location || "").trim();
+    const gridOperator = String(request.gridOperator || "").trim();
+    const gridOperatorId = String(request.gridOperatorId || "").trim();
+    const boundingBox = isObject(request.boundingBox) ? request.boundingBox : undefined;
+    if (!location && !boundingBox && !gridOperator) {
+        throw new Error("location, boundingBox, or gridOperator is required for OSM grid context lookup.");
+    }
+    const voltageLevel = request.voltageLevel;
+    if (voltageLevel !== undefined && !["NS", "MS", "HS", "EHS"].includes(voltageLevel)) {
+        throw new Error("voltageLevel must be one of NS, MS, HS, EHS.");
+    }
+    const includeSubstations = request.includeSubstations !== false;
+    const includeTopology = request.includeTopology !== false;
+    if (!includeSubstations && !includeTopology) {
+        throw new Error("At least one of includeSubstations or includeTopology must be true.");
+    }
+    return {
+        ...(location ? { location } : {}),
+        ...(boundingBox ? { boundingBox } : {}),
+        ...(gridOperator ? { gridOperator } : {}),
+        ...(gridOperatorId ? { gridOperatorId } : {}),
+        ...(voltageLevel ? { voltageLevel } : {}),
+        includeSubstations,
+        includeTopology,
+        includeGeometry: request.includeGeometry === true,
+        includeGraphData: request.includeGraphData === true,
+        maxResults: request.maxResults === undefined || request.maxResults === null
+            ? 200
+            : Math.max(1, Math.min(1000, Number(request.maxResults))),
+    };
+}
+function assessGridContextEvidence(substations, topology) {
+    const substationData = getNestedObject(substations, ["data"]);
+    const topologyData = getNestedObject(topology, ["data"]);
+    const substationSummary = getNestedObject(substationData, ["summary"]);
+    const topologyMetrics = getNestedObject(topologyData, ["topologyMetrics"]);
+    const topologyQuality = getNestedObject(topologyData, ["dataQuality"]);
+    const substationQuality = getNestedObject(substationData, ["dataQuality"]);
+    const totalSubstations = Number(substationSummary.totalSubstations || 0);
+    const nodes = Number(topologyMetrics.nodes || 0);
+    const edges = Number(topologyMetrics.edges || 0);
+    const coverageLabel = String(topologyQuality.coverageLabel || substationQuality.coverageLabel || "UNKNOWN");
+    let hypothesisStrength = "low";
+    if ((totalSubstations > 0 && nodes > 0) || edges > 0)
+        hypothesisStrength = "medium";
+    if (totalSubstations >= 5 && edges >= 5 && ["MEDIUM", "HIGH"].includes(coverageLabel))
+        hypothesisStrength = "medium";
+    const warnings = [
+        "OSM grid context is public visible-infrastructure evidence and must be treated as a planning hypothesis, not as a Netzverträglichkeitsprüfung or capacity proof.",
+        "OSM coverage for German distribution grids is incomplete; missing substations, lines, or voltage tags do not prove absence.",
+    ];
+    if (totalSubstations === 0 && nodes === 0 && edges === 0) {
+        warnings.push("No visible grid objects were found in the requested OSM scope.");
+    }
+    return {
+        evidenceType: "osm_visible_grid_context",
+        hypothesisStrength,
+        coverageLabel,
+        totalSubstations,
+        topologyNodes: nodes,
+        topologyEdges: edges,
+        answerGuidance: "Use this evidence to make ZNP, voltage-level, and siting hypotheses more concrete. Do not claim actual remaining capacity, protection settings, switching state, or asset ownership unless separate Cernion/operator evidence supports it.",
+        warnings,
+    };
+}
+async function queryGridContext(config, request, signal) {
+    const query = normalizeGridContextQuery(request);
+    const common = {
+        ...(query.location ? { location: query.location } : {}),
+        ...(query.boundingBox ? { boundingBox: query.boundingBox } : {}),
+        ...(query.gridOperator ? { gridOperator: query.gridOperator } : {}),
+        ...(query.gridOperatorId ? { gridOperatorId: query.gridOperatorId } : {}),
+        ...(query.voltageLevel ? { voltageLevel: query.voltageLevel } : {}),
+    };
+    const substations = query.includeSubstations === true
+        ? await requestCernionDegraded(config, "/api/osm-geo/substation-finder", {
+            method: "POST",
+            body: {
+                ...common,
+                maxResults: query.maxResults,
+                include_geometry: query.includeGeometry,
+            },
+            signal,
+        })
+        : null;
+    const topology = query.includeTopology === true
+        ? await requestCernionDegraded(config, "/api/osm-geo/grid-topology", {
+            method: "POST",
+            body: {
+                ...common,
+                includeGraphData: query.includeGraphData,
+            },
+            signal,
+        })
+        : null;
+    return {
+        kind: "grid_context",
+        source: "osm_geo",
+        query,
+        evidenceAssessment: assessGridContextEvidence(substations, topology),
+        results: {
+            substations,
+            topology,
+        },
+    };
+}
+async function requestCernionDegraded(config, path, options = {}) {
+    try {
+        return await requestCernion(config, path, options);
+    }
+    catch (error) {
+        return {
+            isError: true,
+            error: {
+                code: "cernion_request_failed",
+                message: error instanceof Error ? error.message : String(error),
+            },
+            structuredContent: {
+                path,
+                degraded: true,
+            },
+        };
+    }
+}
 function sleep(ms, signal) {
     return new Promise((resolve, reject) => {
         if (signal?.aborted) {
@@ -571,6 +696,29 @@ export default defineToolPlugin({
             },
         }),
         tool({
+            name: "cernion_query_grid_context",
+            label: "Query Cernion OSM Grid Context",
+            description: "Query Cernion OSM Geo endpoints for read-only visible grid infrastructure context such as substations, transformers, voltage levels, lines, and topology metrics. Use this for ZNP, Netzanschluss, siting, fNAV, charging-hub, storage, PV, or voltage-level hypotheses before making concrete statements about likely critical network areas. Treat the result as OSM-based hypothesis evidence only: it can make planning assumptions more concrete, but it is not a capacity proof, Netzverträglichkeitsprüfung, switching-state model, or complete operator asset inventory.",
+            parameters: Type.Object({
+                location: Type.Optional(Type.String({ description: "Area name, municipality, city, or district, e.g. 'Sinsheim'." })),
+                boundingBox: Type.Optional(Type.Record(Type.String(), Type.Any(), {
+                    description: "Optional geographic bounding box with north/south/east/west values.",
+                })),
+                gridOperator: Type.Optional(Type.String({ description: "Optional grid operator name to scope/fallback OSM area lookup." })),
+                gridOperatorId: Type.Optional(Type.String({ description: "Optional MaStR/VNB grid operator id if already known." })),
+                voltageLevel: Type.Optional(Type.String({ description: "Optional voltage-level filter: NS, MS, HS, or EHS." })),
+                includeSubstations: Type.Optional(Type.Boolean({ description: "Call /api/osm-geo/substation-finder. Defaults to true." })),
+                includeTopology: Type.Optional(Type.Boolean({ description: "Call /api/osm-geo/grid-topology. Defaults to true." })),
+                includeGeometry: Type.Optional(Type.Boolean({ description: "Include substation polygon geometry when available. Defaults to false." })),
+                includeGraphData: Type.Optional(Type.Boolean({ description: "Include raw topology graph data. Defaults to false." })),
+                maxResults: Type.Optional(Type.Number({ description: "Maximum returned substation records, 1..1000. Defaults to 200." })),
+            }),
+            execute: async (params, config, context) => {
+                const result = await queryGridContext(config, params, context.signal);
+                return scrubSecretValues(result, config.bearerToken);
+            },
+        }),
+        tool({
             name: "cernion_route_evidence",
             label: "Route Cernion Evidence",
             description: "Ask Cernion's backend Evidence Router for read-only endpoint recommendations and fachliche result semantics. Cernion does not execute these endpoints or synthesize the final answer.",
@@ -762,4 +910,4 @@ export default defineToolPlugin({
         }),
     ],
 });
-export { buildQueryPath, buildUrl, executeEvidenceEndpointPlan, executeRestExecutionPlan, isRestProxyAllowed, normalizeDomainKnowledgeQuery, assessDomainKnowledgeEvidence, pollCernionJobResult, queryDomainKnowledge, requireConfig, requireProcessConfig, requestCernion, requestCernionProcess, routeEvidence, scrubSecretValues, validateEvidenceEndpointPlan, validateRestExecutionPlan, };
+export { buildQueryPath, buildUrl, executeEvidenceEndpointPlan, executeRestExecutionPlan, isRestProxyAllowed, normalizeDomainKnowledgeQuery, normalizeGridContextQuery, assessDomainKnowledgeEvidence, assessGridContextEvidence, pollCernionJobResult, queryGridContext, queryDomainKnowledge, requireConfig, requireProcessConfig, requestCernion, requestCernionProcess, routeEvidence, scrubSecretValues, validateEvidenceEndpointPlan, validateRestExecutionPlan, };

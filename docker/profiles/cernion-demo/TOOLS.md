@@ -41,6 +41,32 @@ Use:
 
 Keep storage, generation, load, and forecast assumptions separate in the answer.
 
+## ZNP, Netzanschluss, And Spatial Grid Context
+
+Examples:
+
+- Zielnetzplanung or ZNP prechecks
+- voltage-level hypotheses for PV, BESS, HPC charging, or industrial loads
+- likely critical HS/MS/MS/NS areas
+- substations, lines, visible grid topology, or site context
+- fNAV or flexible connection assessment
+
+Use:
+
+1. `cernion_query_domain_knowledge` for ZNP, §14d, fNAV, NOVA, and process/strategy knowledge
+2. `cernion_query_grid_context` for OSM-visible substations, voltage levels, lines, and topology metrics
+3. `cernion_route_evidence` for MaStR, residual load, forecasts, market partners, or operational backend status
+4. `cernion_execute_evidence_endpoint` for read-only plans
+
+Treat OSM grid context as concrete hypothesis evidence. It can make a ZNP answer
+more specific about likely Spannungsebenen, Umspannwerke, Leitungskorridore, and
+network-area risks. It does not prove available capacity, switching state,
+protection settings, complete ownership, or final Netzverträglichkeit.
+
+If OSM returns no objects, say that this OSM scope returned no visible objects.
+Do not say Cernion has no grid data unless all relevant Cernion evidence paths
+were checked.
+
 ## Operational Status Questions
 
 For readiness, metering, master data, missing identifiers, or cockpit state, use operational Cernion evidence after the fachliche frame is clear.

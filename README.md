@@ -31,6 +31,7 @@ It does not implement Cernion domain logic and must not expose admin/token/HITL-
 - `cernion_sidecar_tools` loads the MCP/OpenClaw-like tool list.
 - `cernion_sidecar_call` calls one curated Cernion provider tool through the provider policy gate.
 - `cernion_query_domain_knowledge` queries Cernion Knowledge RAG for regulatory, procedural, and fachliche evidence such as laws, BNetzA guidance, Verfahrensanweisungen, roles, obligations, definitions, and job-help context. It starts the async Knowledge RAG job, waits briefly for the result, and returns an `evidenceAssessment`. This assessment describes primary-source support for hard legal/procedural claims, not the value of Cernion domain knowledge itself. If `evidenceAdequacy` is `low`, OpenClaw should say that Cernion returned useful domain/strategy knowledge but not enough primary-source support for hard obligations.
+- `cernion_query_grid_context` queries Cernion OSM Geo for visible grid infrastructure context such as substations, transformers, voltage-level hints, lines, and topology metrics. Use it for ZNP, Netzanschluss, PV/BESS/HPC siting, fNAV, and likely critical voltage-level hypotheses. Treat the result as OSM-based hypothesis evidence, not as a capacity proof or complete grid-operator asset model.
 - `cernion_route_evidence` calls Cernion's backend Evidence Router and returns read-only endpoint recommendations plus result semantics.
 - `cernion_execute_evidence_endpoint` executes one GET or POST read-only endpoint recommended by `cernion_route_evidence`, requiring `policy.readOnly=true` and `sideEffects=none`.
 - `cernion_prepare_process_intent` calls Cernion's separate Process Intake boundary and creates only a `pending_confirmation` receipt. It uses a separate process token.
@@ -125,8 +126,9 @@ The token file should contain only the bearer token and should be readable only 
 Allowed:
 
 - read-only/advisory tool discovery
-- calls to the five curated Cernion Sidecar tools
+- calls to curated Cernion Sidecar tools
 - read-only Knowledge RAG queries for regulatory and procedural domain evidence
+- read-only OSM Geo grid-context queries for ZNP and Netzanschluss hypotheses
 - read-only Evidence Router calls and execution of router-recommended GET/POST evidence endpoints
 - Process Intake creation of `pending_confirmation` receipts through a separate process-token boundary
 - resolve calls to the Cernion agent manifest endpoints

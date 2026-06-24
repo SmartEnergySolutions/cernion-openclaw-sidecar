@@ -118,6 +118,7 @@
   "contracts": {
     "tools": [
       "cernion_query_domain_knowledge",
+      "cernion_query_grid_context",
       "cernion_route_evidence",
       "cernion_execute_evidence_endpoint",
       "cernion_prepare_process_intent",

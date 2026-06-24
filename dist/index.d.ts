@@ -50,6 +50,18 @@ type DomainKnowledgeEvidenceAssessment = {
     reasons: string[];
     answerGuidance: string;
 };
+type GridContextQuery = {
+    location?: string;
+    boundingBox?: Record<string, unknown>;
+    gridOperator?: string;
+    gridOperatorId?: string;
+    voltageLevel?: "NS" | "MS" | "HS" | "EHS";
+    includeSubstations?: boolean;
+    includeTopology?: boolean;
+    includeGeometry?: boolean;
+    includeGraphData?: boolean;
+    maxResults?: number;
+};
 declare function requireConfig(config: PluginConfig): {
     baseUrl: string;
     bearerToken: string;
@@ -81,6 +93,9 @@ declare function routeEvidence(config: PluginConfig, request: {
 }, signal?: AbortSignal): Promise<unknown>;
 declare function normalizeDomainKnowledgeQuery(request: DomainKnowledgeQuery): Record<string, unknown>;
 declare function assessDomainKnowledgeEvidence(query: unknown, result: unknown): DomainKnowledgeEvidenceAssessment;
+declare function normalizeGridContextQuery(request: GridContextQuery): Record<string, unknown>;
+declare function assessGridContextEvidence(substations: unknown, topology: unknown): Record<string, unknown>;
+declare function queryGridContext(config: PluginConfig, request: GridContextQuery, signal?: AbortSignal): Promise<Record<string, unknown>>;
 declare function pollCernionJobResult(config: PluginConfig, jobId: string, maxWaitMs: number, signal?: AbortSignal): Promise<unknown>;
 declare function queryDomainKnowledge(config: PluginConfig, request: DomainKnowledgeQuery, signal?: AbortSignal): Promise<unknown>;
 declare function executeEvidenceEndpointPlan(config: PluginConfig, plan: EvidenceEndpointPlan, signal?: AbortSignal): Promise<unknown>;
@@ -89,4 +104,4 @@ declare function requestCernionProcess(config: PluginConfig, path: string, optio
 declare function scrubSecretValues(value: unknown, token?: string): unknown;
 declare const _default: import("openclaw/plugin-sdk/tool-plugin").DefinedToolPluginEntry;
 export default _default;
-export { buildQueryPath, buildUrl, executeEvidenceEndpointPlan, executeRestExecutionPlan, isRestProxyAllowed, normalizeDomainKnowledgeQuery, assessDomainKnowledgeEvidence, pollCernionJobResult, queryDomainKnowledge, requireConfig, requireProcessConfig, requestCernion, requestCernionProcess, routeEvidence, scrubSecretValues, validateEvidenceEndpointPlan, validateRestExecutionPlan, };
+export { buildQueryPath, buildUrl, executeEvidenceEndpointPlan, executeRestExecutionPlan, isRestProxyAllowed, normalizeDomainKnowledgeQuery, normalizeGridContextQuery, assessDomainKnowledgeEvidence, assessGridContextEvidence, pollCernionJobResult, queryGridContext, queryDomainKnowledge, requireConfig, requireProcessConfig, requestCernion, requestCernionProcess, routeEvidence, scrubSecretValues, validateEvidenceEndpointPlan, validateRestExecutionPlan, };

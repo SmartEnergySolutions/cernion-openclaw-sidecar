@@ -190,6 +190,30 @@ This avoids two weak demo behaviours: generic web-search answers despite
 Cernion-owned knowledge, and immediate process/backend hydration when the user
 first needs regulatory or procedural consulting.
 
+## ZNP And OSM Grid Context Example
+
+For Zielnetzplanung, Netzanschluss, PV/BESS/HPC siting, fNAV, or
+voltage-level questions, the demo profile should combine Cernion Fachwissen
+with OSM-visible grid infrastructure context. Use a prompt like:
+
+```text
+Ich möchte für die Stadt Sinsheim (PLZ 74889) eine erste Zielnetzplanungs-Einschätzung bis 2030. Angenommen werden 20 MWp PV, 10 MW / 20 MWh Speicher, ein Ladepark mit 30 HPC-Ladepunkten, 800 Wärmepumpen und 1.500 Wallboxen. Welche Spannungsebenen und Netzbereiche könnten kritisch werden, und welche Cernion-Evidenz fehlt?
+```
+
+Expected behaviour:
+
+1. OpenClaw uses `cernion_query_domain_knowledge` for ZNP, §14d, fNAV, NOVA,
+   and process/strategy evidence.
+2. OpenClaw uses `cernion_query_grid_context` for Cernion OSM Geo evidence:
+   substations, transformers, voltage-level hints, lines, and topology metrics.
+3. OpenClaw then uses `cernion_route_evidence` and
+   `cernion_execute_evidence_endpoint` for MaStR, residual load, forecasts,
+   market partners, or operational status when relevant.
+4. The final answer treats OSM as concrete hypothesis evidence. It may make
+   statements about likely HS/MS/MS/NS concerns more specific, but must not
+   claim available capacity, switching state, protection settings, complete
+   ownership, or a final Netzverträglichkeitsprüfung without separate evidence.
+
 ## Smoke Test
 
 To verify the container and sidecar connection without using the browser:

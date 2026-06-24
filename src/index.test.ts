@@ -6,6 +6,8 @@ import entry, {
   executeEvidenceEndpointPlan,
   executeRestExecutionPlan,
   normalizeDomainKnowledgeQuery,
+  normalizeGridContextQuery,
+  queryGridContext,
   queryDomainKnowledge,
   requireConfig,
   requireProcessConfig,
@@ -23,6 +25,7 @@ import { tmpdir } from "node:os";
 
 const EXPECTED_TOOLS = [
   "cernion_query_domain_knowledge",
+  "cernion_query_grid_context",
   "cernion_route_evidence",
   "cernion_execute_evidence_endpoint",
   "cernion_prepare_process_intent",
@@ -706,6 +709,171 @@ describe("cernion-energy-sidecar", () => {
       success: true,
       forecast_next_24h_gco2eq_kwh: [{ hour: "10:00", value: 310 }],
       echoed: "[redacted]",
+    });
+  });
+
+  it("normalizes OSM grid context queries and requires a scope", () => {
+    expect(
+      normalizeGridContextQuery({
+        location: " Sinsheim ",
+        voltageLevel: "MS",
+        includeGraphData: true,
+        maxResults: 5000,
+      }),
+    ).toEqual({
+      location: "Sinsheim",
+      voltageLevel: "MS",
+      includeSubstations: true,
+      includeTopology: true,
+      includeGeometry: false,
+      includeGraphData: true,
+      maxResults: 1000,
+    });
+
+    expect(() => normalizeGridContextQuery({})).toThrow(/location, boundingBox, or gridOperator/);
+    expect(() => normalizeGridContextQuery({ location: "Sinsheim", voltageLevel: "MV" as never })).toThrow(/voltageLevel/);
+    expect(() =>
+      normalizeGridContextQuery({ location: "Sinsheim", includeSubstations: false, includeTopology: false }),
+    ).toThrow(/At least one/);
+  });
+
+  it("queries Cernion OSM grid context as hypothesis evidence", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        text: async () =>
+          JSON.stringify({
+            success: true,
+            data: {
+              summary: {
+                totalSubstations: 8,
+                byVoltageLevel: { MS_HS: 2, NS_MS: 6 },
+              },
+              dataQuality: { coverageLabel: "MEDIUM" },
+              echoed: "ck_readonly_secret",
+            },
+          }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        text: async () =>
+          JSON.stringify({
+            success: true,
+            data: {
+              topologyMetrics: {
+                nodes: 12,
+                edges: 9,
+                topologyType: "MIXED",
+                voltageBreakdown: { MS: { nodes: 10, edges: 8 }, HS: { nodes: 2, edges: 1 } },
+              },
+              dataQuality: { coverageLabel: "MEDIUM", osmEdgeCoverageEstimate: 0.47 },
+              echoed: "ck_readonly_secret",
+            },
+          }),
+      } as Response);
+
+    const result = await queryGridContext(
+      {
+        baseUrl: "https://cernion.example",
+        bearerToken: "ck_readonly_secret",
+      },
+      {
+        location: "Sinsheim",
+        voltageLevel: "MS",
+        maxResults: 50,
+      },
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://cernion.example/api/osm-geo/substation-finder",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          location: "Sinsheim",
+          voltageLevel: "MS",
+          maxResults: 50,
+          include_geometry: false,
+        }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://cernion.example/api/osm-geo/grid-topology",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          location: "Sinsheim",
+          voltageLevel: "MS",
+          includeGraphData: false,
+        }),
+      }),
+    );
+    expect(result).toMatchObject({
+      kind: "grid_context",
+      source: "osm_geo",
+      evidenceAssessment: {
+        evidenceType: "osm_visible_grid_context",
+        hypothesisStrength: "medium",
+        coverageLabel: "MEDIUM",
+        totalSubstations: 8,
+        topologyNodes: 12,
+        topologyEdges: 9,
+      },
+      results: {
+        substations: { success: true, data: { echoed: "[redacted]" } },
+        topology: { success: true, data: { echoed: "[redacted]" } },
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain("ck_readonly_secret");
+  });
+
+  it("degrades OSM grid context lookup failures into evidence gaps", async () => {
+    vi.spyOn(globalThis, "fetch")
+      .mockRejectedValueOnce(new Error("Overpass timeout"))
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        text: async () =>
+          JSON.stringify({
+            success: true,
+            data: {
+              topologyMetrics: { nodes: 0, edges: 0 },
+              dataQuality: { coverageLabel: "LOW" },
+            },
+          }),
+      } as Response);
+
+    const result = await queryGridContext(
+      {
+        baseUrl: "https://cernion.example",
+        bearerToken: "ck_readonly_secret",
+      },
+      {
+        location: "Sinsheim",
+      },
+    );
+
+    expect(result).toMatchObject({
+      kind: "grid_context",
+      source: "osm_geo",
+      evidenceAssessment: {
+        hypothesisStrength: "low",
+        topologyNodes: 0,
+        topologyEdges: 0,
+      },
+      results: {
+        substations: {
+          isError: true,
+          error: { code: "cernion_request_failed", message: "Overpass timeout" },
+        },
+      },
     });
   });
 

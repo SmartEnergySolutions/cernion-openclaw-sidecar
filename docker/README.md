@@ -54,15 +54,24 @@ Edit `docker/.env`:
 ```dotenv
 CERNION_BASE_URL=https://cernion.example
 CERNION_TOKEN=ck_your_cernion_token_here
+OPENCLAW_MODEL=google/gemini-2.5-flash
 OPENCLAW_CONTROLUI_PORT=19101
 OPENCLAW_GATEWAY_TOKEN=cernion-local-demo
 ```
 
 Add model provider credentials for your OpenClaw setup as needed. The Compose
 file forwards `docker/.env` into the container, so provider variables such as
-`OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GOOGLE_API_KEY`, or other
-OpenClaw-supported provider settings can live in the same file. The Sidecar does
-not depend on a specific model provider.
+`GOOGLE_API_KEY`, `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, or
+other OpenClaw-supported provider settings can live in the same file.
+
+`OPENCLAW_MODEL` selects the model for the demo agent. If it is omitted, the
+container auto-selects a matching default for common provider keys:
+
+- `GOOGLE_API_KEY` or `GEMINI_API_KEY` -> `google/gemini-2.5-flash`
+- `ANTHROPIC_API_KEY` -> `anthropic/claude-sonnet-4-6`
+- `OPENAI_API_KEY` -> `openai/gpt-5.5`
+
+The Sidecar itself does not depend on a specific model provider.
 
 ## Start
 
@@ -167,9 +176,10 @@ docker compose --env-file docker/.env -f docker/compose.yml run --rm openclaw-ce
 | `CERNION_READONLY_TOKEN` | strict setup | Token used for read-only evidence calls. |
 | `CERNION_PROCESS_TOKEN` | optional | Token used only for `cernion_prepare_process_intent`. |
 | `CERNION_SIDECAR_TIMEOUT_MS` | no | HTTP timeout for Cernion calls, default `15000`. |
+| `OPENCLAW_MODEL` | recommended | Demo-agent model id, for example `google/gemini-2.5-flash`. |
 | `OPENCLAW_CONTROLUI_PORT` | no | Host port for Control UI, default `19101`. |
 | `OPENCLAW_GATEWAY_TOKEN` | no | Local Gateway token for Control UI login, default `cernion-local-demo`. |
-| provider env vars | optional | Any model-provider environment variables supported by OpenClaw, for example `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, or `GOOGLE_API_KEY`. |
+| provider env vars | recommended | Any model-provider environment variables supported by OpenClaw, for example `GOOGLE_API_KEY`, `GEMINI_API_KEY`, `ANTHROPIC_API_KEY`, or `OPENAI_API_KEY`. |
 
 ## Notes
 

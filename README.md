@@ -81,7 +81,7 @@ OpenClaw with this plugin installed and exposes the browser Control UI on
 
 ```bash
 cp docker/.env.example docker/.env
-# edit docker/.env: CERNION_BASE_URL, CERNION_TOKEN, and any OpenClaw model-provider env vars
+# edit docker/.env: CERNION_BASE_URL, CERNION_TOKEN, OPENCLAW_MODEL, and a model-provider key
 docker compose --env-file docker/.env -f docker/compose.yml up --build
 ```
 

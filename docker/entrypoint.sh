@@ -54,6 +54,65 @@ const config = {
 };
 
 const sidecarConfig = config.plugins.entries["cernion-energy-sidecar"].config;
+const envRef = (id) => ({ source: "env", provider: "default", id });
+const providers = {};
+
+const googleApiKeyEnv = process.env.GOOGLE_API_KEY
+  ? "GOOGLE_API_KEY"
+  : process.env.GEMINI_API_KEY
+    ? "GEMINI_API_KEY"
+    : null;
+
+if (googleApiKeyEnv) {
+  providers.google = {
+    auth: "api-key",
+    apiKey: envRef(googleApiKeyEnv),
+  };
+}
+
+if (process.env.ANTHROPIC_API_KEY) {
+  providers.anthropic = {
+    auth: "api-key",
+    apiKey: envRef("ANTHROPIC_API_KEY"),
+  };
+}
+
+if (process.env.OPENAI_API_KEY) {
+  providers.openai = {
+    auth: "api-key",
+    apiKey: envRef("OPENAI_API_KEY"),
+  };
+}
+
+let primaryModel =
+  process.env.OPENCLAW_MODEL || process.env.OPENCLAW_DEFAULT_MODEL || "";
+
+if (!primaryModel) {
+  if (googleApiKeyEnv) {
+    primaryModel = "google/gemini-2.5-flash";
+  } else if (process.env.ANTHROPIC_API_KEY) {
+    primaryModel = "anthropic/claude-sonnet-4-6";
+  } else if (process.env.OPENAI_API_KEY) {
+    primaryModel = "openai/gpt-5.5";
+  }
+}
+
+if (Object.keys(providers).length > 0) {
+  config.models = {
+    mode: "merge",
+    providers,
+  };
+}
+
+if (primaryModel) {
+  config.agents = {
+    defaults: {
+      model: {
+        primary: primaryModel,
+      },
+    },
+  };
+}
 
 if (process.env.CERNION_READONLY_TOKEN) {
   sidecarConfig.bearerTokenEnv = "CERNION_READONLY_TOKEN";

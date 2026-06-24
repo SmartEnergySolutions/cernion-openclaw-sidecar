@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { requestCernion } from "../dist/index.js";
+import { queryDomainKnowledge, requestCernion } from "../dist/index.js";
 
 const baseUrl = process.env.CERNION_BASE_URL || "http://10.0.0.8:3900";
 const bearerTokenFile = process.env.CERNION_READONLY_TOKEN_FILE || "/run/secrets/cernion-readonly-token";
@@ -65,6 +65,22 @@ assert(
 );
 assertNoSecretEcho(operations);
 
+const fachwissen = await queryDomainKnowledge(config, {
+  query: "Welche Pflichten ergeben sich aus §14a EnWG für einen Verteilnetzbetreiber?",
+  limit: 3,
+  maxWaitMs: timeoutMs,
+});
+assert.equal(fachwissen?.kind, "domain_knowledge");
+assert.equal(fachwissen?.source, "knowledge_rag");
+assert.notEqual(fachwissen?.result?.isError, true, "Knowledge RAG query must not return a Cernion error");
+assertNoSecretEcho(fachwissen);
+
+const knowledgeRagReturned =
+  fachwissen?.result?.data?.returned ||
+  fachwissen?.result?.data?.results?.length ||
+  fachwissen?.result?.results?.length ||
+  0;
+
 console.log(
   JSON.stringify(
     {
@@ -74,6 +90,7 @@ console.log(
       mcpTools: tools.tools.length,
       capabilities: capabilities.data.length,
       operations: operations.data.length,
+      knowledgeRagReturned,
     },
     null,
     2,

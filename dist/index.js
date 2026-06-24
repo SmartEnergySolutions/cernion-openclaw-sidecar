@@ -191,6 +191,113 @@ async function routeEvidence(config, request, signal) {
         signal,
     });
 }
+function normalizeDomainKnowledgeQuery(request) {
+    const queryType = request.queryType || "semantic";
+    if (!["semantic", "scroll", "fetch", "collection_info"].includes(queryType)) {
+        throw new Error("queryType must be one of semantic, scroll, fetch, collection_info.");
+    }
+    if (queryType === "semantic" && !String(request.query || "").trim()) {
+        throw new Error("query is required for semantic domain knowledge lookup.");
+    }
+    if (queryType === "fetch" && (!Array.isArray(request.ids) || request.ids.length === 0)) {
+        throw new Error("ids is required for fetch domain knowledge lookup.");
+    }
+    const limit = request.limit === undefined || request.limit === null
+        ? 10
+        : Math.max(1, Math.min(100, Number(request.limit)));
+    return {
+        queryType,
+        ...(request.query === undefined ? {} : { query: request.query }),
+        limit,
+        ...(request.scoreThreshold === undefined ? {} : { scoreThreshold: request.scoreThreshold }),
+        ...(request.ids === undefined ? {} : { ids: request.ids }),
+        ...(request.offset === undefined ? {} : { offset: request.offset }),
+        ...(request.filter === undefined ? {} : { filter: request.filter }),
+        withPayload: request.withPayload === undefined ? true : request.withPayload,
+        withVectors: request.withVectors === true,
+    };
+}
+function isObject(value) {
+    return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function sleep(ms, signal) {
+    return new Promise((resolve, reject) => {
+        if (signal?.aborted) {
+            reject(new Error("Cernion Knowledge RAG polling aborted."));
+            return;
+        }
+        const timer = setTimeout(resolve, ms);
+        signal?.addEventListener("abort", () => {
+            clearTimeout(timer);
+            reject(new Error("Cernion Knowledge RAG polling aborted."));
+        }, { once: true });
+    });
+}
+async function pollCernionJobResult(config, jobId, maxWaitMs, signal) {
+    const deadline = Date.now() + Math.max(1000, maxWaitMs);
+    let lastStatus = null;
+    while (Date.now() < deadline) {
+        const status = await requestCernion(config, `/api/jobs/${encodeURIComponent(jobId)}/status`, {
+            method: "GET",
+            signal,
+        });
+        lastStatus = status;
+        if (isObject(status) && status.status === "completed") {
+            const resultUrl = typeof status.resultUrl === "string" && status.resultUrl.startsWith("/api/")
+                ? status.resultUrl
+                : `/api/jobs/${encodeURIComponent(jobId)}/result`;
+            return requestCernion(config, resultUrl, { method: "GET", signal });
+        }
+        if (isObject(status) && status.status === "error") {
+            return {
+                isError: true,
+                error: {
+                    code: "cernion_knowledge_rag_job_error",
+                    status: "error",
+                },
+                structuredContent: status,
+            };
+        }
+        await sleep(500, signal);
+    }
+    return {
+        kind: "domain_knowledge_job",
+        source: "knowledge_rag",
+        status: "pending",
+        message: "Cernion Knowledge RAG job is still running. Poll resultUrl later if needed.",
+        jobId,
+        statusUrl: `/api/jobs/${encodeURIComponent(jobId)}/status`,
+        resultUrl: `/api/jobs/${encodeURIComponent(jobId)}/result`,
+        lastStatus,
+    };
+}
+async function queryDomainKnowledge(config, request, signal) {
+    const body = normalizeDomainKnowledgeQuery(request);
+    const initial = await requestCernion(config, "/api/knowledge-rag/query", {
+        method: "POST",
+        body,
+        signal,
+    });
+    if (!isObject(initial) || initial.isError === true || !initial.jobId || request.waitForResult === false) {
+        return {
+            kind: "domain_knowledge",
+            source: "knowledge_rag",
+            query: body,
+            result: initial,
+        };
+    }
+    const maxWaitMs = request.maxWaitMs === undefined
+        ? Math.min(requireConfig(config).timeoutMs, 30000)
+        : Math.max(1000, Math.min(60000, Number(request.maxWaitMs)));
+    const result = await pollCernionJobResult(config, String(initial.jobId), maxWaitMs, signal);
+    return {
+        kind: "domain_knowledge",
+        source: "knowledge_rag",
+        query: body,
+        job: initial,
+        result,
+    };
+}
 async function executeEvidenceEndpointPlan(config, plan, signal) {
     if (!isRestProxyAllowed(config)) {
         throw new Error("Cernion read-only REST proxy is disabled by configuration.");
@@ -295,6 +402,28 @@ export default defineToolPlugin({
     description: "Expose Cernion Energy Sidecar tools to OpenClaw through separated evidence and process boundaries.",
     configSchema,
     tools: (tool) => [
+        tool({
+            name: "cernion_query_domain_knowledge",
+            label: "Query Cernion Fachwissen",
+            description: "Query Cernion Knowledge RAG for read-only regulatory, procedural, and fachliche domain knowledge before using web search or operative backend hydration. Use this for laws, BNetzA guidance, Verfahrensanweisungen, roles, obligations, definitions, and consulting-at-the-job context.",
+            parameters: Type.Object({
+                queryType: Type.Optional(Type.String({ description: "Knowledge RAG mode: semantic, scroll, fetch, or collection_info. Defaults to semantic." })),
+                query: Type.Optional(Type.String({ description: "Natural-language fachliche/regulatory knowledge question. Required for semantic lookup." })),
+                limit: Type.Optional(Type.Number({ description: "Maximum results, 1..100. Defaults to 10." })),
+                scoreThreshold: Type.Optional(Type.Number({ description: "Optional semantic score threshold." })),
+                ids: Type.Optional(Type.Array(Type.Union([Type.String(), Type.Number()]), { description: "Point ids for fetch mode." })),
+                offset: Type.Optional(Type.Any({ description: "Optional offset for scroll mode." })),
+                filter: Type.Optional(Type.Record(Type.String(), Type.Any(), { description: "Optional Qdrant-style metadata filter, for example authority/docType/status." })),
+                withPayload: Type.Optional(Type.Boolean({ description: "Return document payload/metadata when available. Defaults to true for consulting evidence." })),
+                withVectors: Type.Optional(Type.Boolean({ description: "Return vectors. Defaults to false and should usually stay false." })),
+                waitForResult: Type.Optional(Type.Boolean({ description: "Wait briefly for async Knowledge RAG job completion. Defaults to true." })),
+                maxWaitMs: Type.Optional(Type.Number({ description: "Maximum wait time for async job result, bounded to 1..60 seconds." })),
+            }),
+            execute: async (params, config, context) => {
+                const result = await queryDomainKnowledge(config, params, context.signal);
+                return scrubSecretValues(result, config.bearerToken);
+            },
+        }),
         tool({
             name: "cernion_route_evidence",
             label: "Route Cernion Evidence",
@@ -487,4 +616,4 @@ export default defineToolPlugin({
         }),
     ],
 });
-export { buildQueryPath, buildUrl, executeEvidenceEndpointPlan, executeRestExecutionPlan, isRestProxyAllowed, requireConfig, requireProcessConfig, requestCernion, requestCernionProcess, routeEvidence, scrubSecretValues, validateEvidenceEndpointPlan, validateRestExecutionPlan, };
+export { buildQueryPath, buildUrl, executeEvidenceEndpointPlan, executeRestExecutionPlan, isRestProxyAllowed, normalizeDomainKnowledgeQuery, pollCernionJobResult, queryDomainKnowledge, requireConfig, requireProcessConfig, requestCernion, requestCernionProcess, routeEvidence, scrubSecretValues, validateEvidenceEndpointPlan, validateRestExecutionPlan, };

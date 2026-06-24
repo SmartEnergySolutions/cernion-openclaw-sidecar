@@ -26,6 +26,20 @@ type EvidenceEndpointPlan = RestExecutionPlan & {
     resultKind?: string;
     purpose?: string;
 };
+type KnowledgeQueryType = "semantic" | "scroll" | "fetch" | "collection_info";
+type DomainKnowledgeQuery = {
+    queryType?: KnowledgeQueryType;
+    query?: string;
+    limit?: number;
+    scoreThreshold?: number;
+    ids?: Array<string | number>;
+    offset?: unknown;
+    filter?: Record<string, unknown>;
+    withPayload?: boolean;
+    withVectors?: boolean;
+    waitForResult?: boolean;
+    maxWaitMs?: number;
+};
 declare function requireConfig(config: PluginConfig): {
     baseUrl: string;
     bearerToken: string;
@@ -55,10 +69,13 @@ declare function routeEvidence(config: PluginConfig, request: {
     question: string;
     context?: Record<string, unknown>;
 }, signal?: AbortSignal): Promise<unknown>;
+declare function normalizeDomainKnowledgeQuery(request: DomainKnowledgeQuery): Record<string, unknown>;
+declare function pollCernionJobResult(config: PluginConfig, jobId: string, maxWaitMs: number, signal?: AbortSignal): Promise<unknown>;
+declare function queryDomainKnowledge(config: PluginConfig, request: DomainKnowledgeQuery, signal?: AbortSignal): Promise<unknown>;
 declare function executeEvidenceEndpointPlan(config: PluginConfig, plan: EvidenceEndpointPlan, signal?: AbortSignal): Promise<unknown>;
 declare function requestCernion(config: PluginConfig, path: string, options?: RequestOptions): Promise<unknown>;
 declare function requestCernionProcess(config: PluginConfig, path: string, options?: RequestOptions): Promise<unknown>;
 declare function scrubSecretValues(value: unknown, token?: string): unknown;
 declare const _default: import("openclaw/plugin-sdk/tool-plugin").DefinedToolPluginEntry;
 export default _default;
-export { buildQueryPath, buildUrl, executeEvidenceEndpointPlan, executeRestExecutionPlan, isRestProxyAllowed, requireConfig, requireProcessConfig, requestCernion, requestCernionProcess, routeEvidence, scrubSecretValues, validateEvidenceEndpointPlan, validateRestExecutionPlan, };
+export { buildQueryPath, buildUrl, executeEvidenceEndpointPlan, executeRestExecutionPlan, isRestProxyAllowed, normalizeDomainKnowledgeQuery, pollCernionJobResult, queryDomainKnowledge, requireConfig, requireProcessConfig, requestCernion, requestCernionProcess, routeEvidence, scrubSecretValues, validateEvidenceEndpointPlan, validateRestExecutionPlan, };

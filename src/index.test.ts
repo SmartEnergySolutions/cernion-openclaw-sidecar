@@ -4,6 +4,8 @@ import entry, {
   buildUrl,
   executeEvidenceEndpointPlan,
   executeRestExecutionPlan,
+  normalizeDomainKnowledgeQuery,
+  queryDomainKnowledge,
   requireConfig,
   requireProcessConfig,
   requestCernion,
@@ -19,6 +21,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 const EXPECTED_TOOLS = [
+  "cernion_query_domain_knowledge",
   "cernion_route_evidence",
   "cernion_execute_evidence_endpoint",
   "cernion_prepare_process_intent",
@@ -425,6 +428,147 @@ describe("cernion-energy-sidecar", () => {
         },
       ],
     });
+  });
+
+  it("normalizes Knowledge RAG requests for consulting-style fachwissen lookup", () => {
+    expect(
+      normalizeDomainKnowledgeQuery({
+        query: "Welche Pflichten ergeben sich aus §14a EnWG für den Netzbetreiber?",
+        limit: 200,
+      }),
+    ).toEqual({
+      queryType: "semantic",
+      query: "Welche Pflichten ergeben sich aus §14a EnWG für den Netzbetreiber?",
+      limit: 100,
+      withPayload: true,
+      withVectors: false,
+    });
+
+    expect(() => normalizeDomainKnowledgeQuery({ queryType: "semantic" })).toThrow(/query is required/);
+    expect(() => normalizeDomainKnowledgeQuery({ queryType: "fetch" })).toThrow(/ids is required/);
+  });
+
+  it("queries Cernion Knowledge RAG and auto-polls async job results", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 202,
+        statusText: "Accepted",
+        text: async () =>
+          JSON.stringify({
+            success: true,
+            jobId: "job-123",
+            status: "queued",
+            statusUrl: "/api/jobs/job-123/status",
+            resultUrl: "/api/jobs/job-123/result",
+          }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        text: async () =>
+          JSON.stringify({
+            jobId: "job-123",
+            status: "completed",
+            resultUrl: "/api/jobs/job-123/result",
+          }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        text: async () =>
+          JSON.stringify({
+            success: true,
+            data: {
+              queryType: "semantic",
+              returned: 1,
+              results: [
+                {
+                  pointId: "doc-14a",
+                  score: 0.91,
+                  referenceText_L0: "Netzbetreiber müssen steuerbare Verbrauchseinrichtungen netzorientiert steuern.",
+                  metadata: { title: "§14a EnWG Prozesswissen", authority: "BNetzA" },
+                  echoed: "ck_readonly_secret",
+                },
+              ],
+            },
+          }),
+      } as Response);
+
+    const result = await queryDomainKnowledge(
+      {
+        baseUrl: "https://cernion.example",
+        bearerToken: "ck_readonly_secret",
+      },
+      {
+        query: "Welche Pflichten ergeben sich aus §14a EnWG?",
+        limit: 5,
+        maxWaitMs: 1000,
+      },
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://cernion.example/api/knowledge-rag/query",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          queryType: "semantic",
+          query: "Welche Pflichten ergeben sich aus §14a EnWG?",
+          limit: 5,
+          withPayload: true,
+          withVectors: false,
+        }),
+      }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://cernion.example/api/jobs/job-123/status",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "https://cernion.example/api/jobs/job-123/result",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(result).toEqual({
+      kind: "domain_knowledge",
+      source: "knowledge_rag",
+      query: {
+        queryType: "semantic",
+        query: "Welche Pflichten ergeben sich aus §14a EnWG?",
+        limit: 5,
+        withPayload: true,
+        withVectors: false,
+      },
+      job: {
+        success: true,
+        jobId: "job-123",
+        status: "queued",
+        statusUrl: "/api/jobs/job-123/status",
+        resultUrl: "/api/jobs/job-123/result",
+      },
+      result: {
+        success: true,
+        data: {
+          queryType: "semantic",
+          returned: 1,
+          results: [
+            {
+              pointId: "doc-14a",
+              score: 0.91,
+              referenceText_L0: "Netzbetreiber müssen steuerbare Verbrauchseinrichtungen netzorientiert steuern.",
+              metadata: { title: "§14a EnWG Prozesswissen", authority: "BNetzA" },
+              echoed: "[redacted]",
+            },
+          ],
+        },
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain("ck_readonly_secret");
   });
 
   it("validates Evidence Router endpoint recommendations separately from GET-only ask plans", () => {

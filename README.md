@@ -8,6 +8,7 @@ The plugin consumes the Cernion Sidecar contract implemented by Cernion Energy T
 - `GET /api/agent-sidecar/mcp/tools`
 - `POST /api/agent-sidecar/mcp/tools/:name/call`
 - `POST /api/agent-sidecar/mcp/tools/cernion.ask/call`
+- `POST /api/knowledge-rag/query`
 - `POST /api/evidence-router/route`
 - `POST /api/copilot-process/intents`
 - `GET /api/_agent/capabilities[?domain=]`
@@ -17,6 +18,7 @@ The plugin consumes the Cernion Sidecar contract implemented by Cernion Energy T
 The Cernion provider remains the policy owner. This plugin stores host-side configuration, discovers tools, and forwards calls through two separated provider boundaries:
 
 - read-only evidence lookup/execution, using the read-only Cernion token
+- read-only regulatory and procedural knowledge lookup through Cernion Knowledge RAG
 - process intake, using a separate process token and creating only `pending_confirmation` receipts
 
 It does not implement Cernion domain logic and must not expose admin/token/HITL-resolve actions.
@@ -28,6 +30,7 @@ It does not implement Cernion domain logic and must not expose admin/token/HITL-
 - `cernion_sidecar_descriptor` loads the generic Energy Sidecar descriptor.
 - `cernion_sidecar_tools` loads the MCP/OpenClaw-like tool list.
 - `cernion_sidecar_call` calls one curated Cernion provider tool through the provider policy gate.
+- `cernion_query_domain_knowledge` queries Cernion Knowledge RAG for regulatory, procedural, and fachliche evidence such as laws, BNetzA guidance, Verfahrensanweisungen, roles, obligations, definitions, and job-help context. It starts the async Knowledge RAG job and waits briefly for the result.
 - `cernion_route_evidence` calls Cernion's backend Evidence Router and returns read-only endpoint recommendations plus result semantics.
 - `cernion_execute_evidence_endpoint` executes one GET or POST read-only endpoint recommended by `cernion_route_evidence`, requiring `policy.readOnly=true` and `sideEffects=none`.
 - `cernion_prepare_process_intent` calls Cernion's separate Process Intake boundary and creates only a `pending_confirmation` receipt. It uses a separate process token.
@@ -122,6 +125,7 @@ Allowed:
 
 - read-only/advisory tool discovery
 - calls to the five curated Cernion Sidecar tools
+- read-only Knowledge RAG queries for regulatory and procedural domain evidence
 - read-only Evidence Router calls and execution of router-recommended GET/POST evidence endpoints
 - Process Intake creation of `pending_confirmation` receipts through a separate process-token boundary
 - resolve calls to the Cernion agent manifest endpoints

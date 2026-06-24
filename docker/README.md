@@ -137,6 +137,30 @@ better first-run setting because it is more likely to:
 - compare momentary, daily, and annual self-supply separately,
 - explain remaining uncertainty instead of treating partial evidence as final.
 
+## Regulatory Fachwissen Example
+
+For regulatory or procedural questions, the Sidecar exposes a dedicated
+Knowledge RAG tool. Use a prompt like:
+
+```text
+Welche Pflichten ergeben sich aus §14a EnWG für einen Verteilnetzbetreiber, und was müsste ich in Cernion als nächstes prüfen?
+```
+
+Expected behaviour:
+
+1. OpenClaw first uses `cernion_query_domain_knowledge` to retrieve Cernion
+   Fachwissen such as regulatory text, BNetzA guidance, procedures, roles, and
+   obligations.
+2. Only after that should it use operational Cernion evidence when the concrete
+   job context requires it, for example grid-operator readiness, metering,
+   master-data quality, or missing BDEW/grid-operator identifiers.
+3. The final answer should separate general obligations from the current
+   operational Cernion status and name the next useful job step.
+
+This avoids two weak demo behaviours: generic web-search answers despite
+Cernion-owned knowledge, and immediate process/backend hydration when the user
+first needs regulatory or procedural consulting.
+
 ## Smoke Test
 
 To verify the container and sidecar connection without using the browser:

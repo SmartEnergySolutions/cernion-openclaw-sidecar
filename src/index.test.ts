@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import entry, {
+  assessDomainKnowledgeEvidence,
   buildQueryPath,
   buildUrl,
   executeEvidenceEndpointPlan,
@@ -551,6 +552,16 @@ describe("cernion-energy-sidecar", () => {
         statusUrl: "/api/jobs/job-123/status",
         resultUrl: "/api/jobs/job-123/result",
       },
+      evidenceAssessment: {
+        evidenceAdequacy: "medium",
+        strongEvidenceCount: 1,
+        routingCardCount: 0,
+        weakOrOffTopicCount: 0,
+        topScore: 0.91,
+        reasons: [],
+        answerGuidance:
+          "The assistant may answer only the points directly supported by the sourced Cernion evidence and should state remaining evidence gaps.",
+      },
       result: {
         success: true,
         data: {
@@ -569,6 +580,47 @@ describe("cernion-energy-sidecar", () => {
       },
     });
     expect(JSON.stringify(result)).not.toContain("ck_readonly_secret");
+  });
+
+  it("marks routing cards and weak hits as insufficient domain evidence", () => {
+    expect(
+      assessDomainKnowledgeEvidence("Welche Pflichten ergeben sich aus §14a EnWG?", {
+        success: true,
+        data: {
+          returned: 2,
+          results: [
+            {
+              pointId: "strategy-14a",
+              score: 0.6,
+              referenceText_L0: "Regulatorische Synonymkarte fuer §14a-EnWG-Flexibilitaet.",
+              payload: {
+                documentId: "strategy:regulatory-14a-flexibility",
+                metadata: { source: "manual_strategy_cards", kind: "strategy_pattern_card" },
+              },
+            },
+            {
+              pointId: "agnes",
+              score: 0.59,
+              referenceText_L0: "Vertrauensschutz und Art. 14 GG im Kontext von AgNes.",
+              metadata: { title: "AgNes Stellungnahme", authority: "BNetzA", status: "in_kraft" },
+            },
+          ],
+        },
+      }),
+    ).toEqual({
+      evidenceAdequacy: "low",
+      strongEvidenceCount: 0,
+      routingCardCount: 1,
+      weakOrOffTopicCount: 1,
+      topScore: 0.6,
+      reasons: [
+        "One or more hits are routing/synonym strategy cards, not primary fachliche sources.",
+        "One or more hits lack strong source metadata, query match, or semantic score.",
+        "No strong sourced fachliche evidence chunk was found for the query.",
+      ],
+      answerGuidance:
+        "The assistant must not present a legal or procedural answer as fully evidenced by Cernion. State that Cernion returned insufficient primary fachliche evidence, use routing-card content only as orientation, and avoid filling gaps from model memory or web search unless explicitly requested.",
+    });
   });
 
   it("validates Evidence Router endpoint recommendations separately from GET-only ask plans", () => {

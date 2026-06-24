@@ -40,6 +40,15 @@ type DomainKnowledgeQuery = {
     waitForResult?: boolean;
     maxWaitMs?: number;
 };
+type DomainKnowledgeEvidenceAssessment = {
+    evidenceAdequacy: "low" | "medium" | "high";
+    strongEvidenceCount: number;
+    routingCardCount: number;
+    weakOrOffTopicCount: number;
+    topScore?: number;
+    reasons: string[];
+    answerGuidance: string;
+};
 declare function requireConfig(config: PluginConfig): {
     baseUrl: string;
     bearerToken: string;
@@ -70,6 +79,7 @@ declare function routeEvidence(config: PluginConfig, request: {
     context?: Record<string, unknown>;
 }, signal?: AbortSignal): Promise<unknown>;
 declare function normalizeDomainKnowledgeQuery(request: DomainKnowledgeQuery): Record<string, unknown>;
+declare function assessDomainKnowledgeEvidence(query: unknown, result: unknown): DomainKnowledgeEvidenceAssessment;
 declare function pollCernionJobResult(config: PluginConfig, jobId: string, maxWaitMs: number, signal?: AbortSignal): Promise<unknown>;
 declare function queryDomainKnowledge(config: PluginConfig, request: DomainKnowledgeQuery, signal?: AbortSignal): Promise<unknown>;
 declare function executeEvidenceEndpointPlan(config: PluginConfig, plan: EvidenceEndpointPlan, signal?: AbortSignal): Promise<unknown>;
@@ -78,4 +88,4 @@ declare function requestCernionProcess(config: PluginConfig, path: string, optio
 declare function scrubSecretValues(value: unknown, token?: string): unknown;
 declare const _default: import("openclaw/plugin-sdk/tool-plugin").DefinedToolPluginEntry;
 export default _default;
-export { buildQueryPath, buildUrl, executeEvidenceEndpointPlan, executeRestExecutionPlan, isRestProxyAllowed, normalizeDomainKnowledgeQuery, pollCernionJobResult, queryDomainKnowledge, requireConfig, requireProcessConfig, requestCernion, requestCernionProcess, routeEvidence, scrubSecretValues, validateEvidenceEndpointPlan, validateRestExecutionPlan, };
+export { buildQueryPath, buildUrl, executeEvidenceEndpointPlan, executeRestExecutionPlan, isRestProxyAllowed, normalizeDomainKnowledgeQuery, assessDomainKnowledgeEvidence, pollCernionJobResult, queryDomainKnowledge, requireConfig, requireProcessConfig, requestCernion, requestCernionProcess, routeEvidence, scrubSecretValues, validateEvidenceEndpointPlan, validateRestExecutionPlan, };

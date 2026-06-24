@@ -75,6 +75,16 @@ type DomainKnowledgeQuery = {
   maxWaitMs?: number;
 };
 
+type DomainKnowledgeEvidenceAssessment = {
+  evidenceAdequacy: "low" | "medium" | "high";
+  strongEvidenceCount: number;
+  routingCardCount: number;
+  weakOrOffTopicCount: number;
+  topScore?: number;
+  reasons: string[];
+  answerGuidance: string;
+};
+
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
 }
@@ -334,6 +344,156 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function getNestedObject(value: unknown, path: string[]): Record<string, unknown> {
+  let current: unknown = value;
+  for (const segment of path) {
+    if (!isObject(current)) return {};
+    current = current[segment];
+  }
+  return isObject(current) ? current : {};
+}
+
+function getNestedString(value: unknown, path: string[]): string {
+  let current: unknown = value;
+  for (const segment of path) {
+    if (!isObject(current)) return "";
+    current = current[segment];
+  }
+  return typeof current === "string" ? current : "";
+}
+
+function collectDomainKnowledgeResults(result: unknown): Record<string, unknown>[] {
+  if (!isObject(result)) return [];
+  const directResults = Array.isArray(result.results) ? result.results : undefined;
+  const dataResults = isObject(result.data) && Array.isArray(result.data.results) ? result.data.results : undefined;
+  return (dataResults || directResults || []).filter(isObject);
+}
+
+function normalizedText(value: unknown): string {
+  if (value === undefined || value === null) return "";
+  if (typeof value === "string") return value.toLowerCase();
+  if (typeof value === "number" || typeof value === "boolean") return String(value).toLowerCase();
+  try {
+    return JSON.stringify(value).toLowerCase();
+  } catch {
+    return "";
+  }
+}
+
+function queryMarkers(query: unknown): string[] {
+  const text = normalizedText(query);
+  const explicitRefs = Array.from(text.matchAll(/§\s*\d+[a-z]?|\b\d+[a-z]?\s*enwg\b|\benwg\b|\bbnetza\b/g)).map(
+    (match) => match[0].replace(/\s+/g, " ").trim(),
+  );
+  const words = text
+    .replace(/[^\p{L}\p{N}§]+/gu, " ")
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter((word) => word.length >= 4 && !["welche", "ergeben", "sich", "aus", "eine", "einer", "einem"].includes(word));
+  return Array.from(new Set([...explicitRefs, ...words])).slice(0, 12);
+}
+
+function isRoutingCard(hit: Record<string, unknown>): boolean {
+  const metadata = getNestedObject(hit, ["metadata"]);
+  const payloadMetadata = getNestedObject(hit, ["payload", "metadata"]);
+  const source = String(payloadMetadata.source || metadata.source || "").toLowerCase();
+  const kind = String(payloadMetadata.kind || metadata.kind || hit.type || "").toLowerCase();
+  const documentId = String(getNestedString(hit, ["payload", "documentId"]) || hit.documentId || "").toLowerCase();
+
+  return (
+    source === "manual_strategy_cards" ||
+    kind === "strategy_pattern_card" ||
+    kind.includes("synonym") ||
+    documentId.startsWith("strategy:")
+  );
+}
+
+function hasSourceMetadata(hit: Record<string, unknown>): boolean {
+  const metadata = getNestedObject(hit, ["metadata"]);
+  const payloadMetadata = getNestedObject(hit, ["payload", "metadata"]);
+  return Boolean(
+    metadata.title ||
+      metadata.authority ||
+      metadata.docType ||
+      metadata.status ||
+      payloadMetadata.sourceUrl ||
+      payloadMetadata.title ||
+      payloadMetadata.authority ||
+      payloadMetadata.docType ||
+      payloadMetadata.status,
+  );
+}
+
+function matchesQuery(hit: Record<string, unknown>, markers: string[]): boolean {
+  if (markers.length === 0) return true;
+  const text = normalizedText({
+    referenceText_L0: hit.referenceText_L0,
+    vectorText: hit.vectorText,
+    metadata: hit.metadata,
+    oeoTags: hit.oeoTags,
+    payload: hit.payload,
+  });
+  return markers.some((marker) => text.includes(marker));
+}
+
+function assessDomainKnowledgeEvidence(query: unknown, result: unknown): DomainKnowledgeEvidenceAssessment {
+  const hits = collectDomainKnowledgeResults(result);
+  const markers = queryMarkers(query);
+  let strongEvidenceCount = 0;
+  let routingCardCount = 0;
+  let weakOrOffTopicCount = 0;
+  let topScore: number | undefined;
+
+  for (const hit of hits) {
+    const score = typeof hit.score === "number" ? hit.score : undefined;
+    if (topScore === undefined && score !== undefined) topScore = score;
+
+    const routingCard = isRoutingCard(hit);
+    if (routingCard) {
+      routingCardCount += 1;
+    }
+
+    const strong =
+      !routingCard &&
+      hasSourceMetadata(hit) &&
+      matchesQuery(hit, markers) &&
+      (score === undefined || score >= 0.65);
+
+    if (strong) {
+      strongEvidenceCount += 1;
+    } else if (!routingCard) {
+      weakOrOffTopicCount += 1;
+    }
+  }
+
+  const reasons: string[] = [];
+  if (hits.length === 0) reasons.push("Knowledge RAG returned no result chunks.");
+  if (routingCardCount > 0) reasons.push("One or more hits are routing/synonym strategy cards, not primary fachliche sources.");
+  if (weakOrOffTopicCount > 0) reasons.push("One or more hits lack strong source metadata, query match, or semantic score.");
+  if (strongEvidenceCount === 0) reasons.push("No strong sourced fachliche evidence chunk was found for the query.");
+
+  let evidenceAdequacy: DomainKnowledgeEvidenceAssessment["evidenceAdequacy"] = "low";
+  if (strongEvidenceCount >= 2) evidenceAdequacy = "high";
+  else if (strongEvidenceCount === 1) evidenceAdequacy = "medium";
+
+  const answerGuidance =
+    evidenceAdequacy === "high"
+      ? "The assistant may synthesize a fachliche answer, but should cite or name the Cernion evidence used and keep operational status separate."
+      : evidenceAdequacy === "medium"
+        ? "The assistant may answer only the points directly supported by the sourced Cernion evidence and should state remaining evidence gaps."
+        : "The assistant must not present a legal or procedural answer as fully evidenced by Cernion. State that Cernion returned insufficient primary fachliche evidence, use routing-card content only as orientation, and avoid filling gaps from model memory or web search unless explicitly requested.";
+
+  return {
+    evidenceAdequacy,
+    strongEvidenceCount,
+    routingCardCount,
+    weakOrOffTopicCount,
+    ...(topScore === undefined ? {} : { topScore }),
+    reasons,
+    answerGuidance,
+  };
+}
+
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     if (signal?.aborted) {
@@ -419,6 +579,7 @@ async function queryDomainKnowledge(
       kind: "domain_knowledge",
       source: "knowledge_rag",
       query: body,
+      evidenceAssessment: assessDomainKnowledgeEvidence(body.query, initial),
       result: initial,
     };
   }
@@ -434,6 +595,7 @@ async function queryDomainKnowledge(
     source: "knowledge_rag",
     query: body,
     job: initial,
+    evidenceAssessment: assessDomainKnowledgeEvidence(body.query, result),
     result,
   };
 }
@@ -558,7 +720,7 @@ export default defineToolPlugin({
       name: "cernion_query_domain_knowledge",
       label: "Query Cernion Fachwissen",
       description:
-        "Query Cernion Knowledge RAG for read-only regulatory, procedural, and fachliche domain knowledge before using web search or operative backend hydration. Use this for laws, BNetzA guidance, Verfahrensanweisungen, roles, obligations, definitions, and consulting-at-the-job context.",
+        "Query Cernion Knowledge RAG for read-only regulatory, procedural, and fachliche domain knowledge before using web search or operative backend hydration. Use this for laws, BNetzA guidance, Verfahrensanweisungen, roles, obligations, definitions, and consulting-at-the-job context. Treat the returned evidenceAssessment as binding: if evidenceAdequacy is low, do not answer legal/procedural duties as settled from Cernion evidence; say the Cernion Fachwissen evidence is insufficient and avoid filling gaps from model memory or web search unless the user explicitly asks.",
       parameters: Type.Object({
         queryType: Type.Optional(Type.String({ description: "Knowledge RAG mode: semantic, scroll, fetch, or collection_info. Defaults to semantic." })),
         query: Type.Optional(Type.String({ description: "Natural-language fachliche/regulatory knowledge question. Required for semantic lookup." })),
@@ -789,6 +951,7 @@ export {
   executeRestExecutionPlan,
   isRestProxyAllowed,
   normalizeDomainKnowledgeQuery,
+  assessDomainKnowledgeEvidence,
   pollCernionJobResult,
   queryDomainKnowledge,
   requireConfig,

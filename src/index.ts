@@ -1026,9 +1026,10 @@ function scrubSecretValues(value: unknown, token?: string): unknown {
 }
 
 export default defineToolPlugin({
-  id: "cernion-energy-sidecar",
-  name: "Cernion Energy Sidecar",
-  description: "Expose Cernion Energy Sidecar tools to OpenClaw through separated evidence and process boundaries.",
+  id: "cernion-energy-tools-sidecar",
+  name: "Cernion Energy Tools Sidecar",
+  description:
+    "Expose Cernion Energy Tools to OpenClaw through separated evidence, knowledge, process-intake, and read-only REST boundaries.",
   configSchema,
   tools: (tool) => [
     tool({
@@ -1168,7 +1169,7 @@ export default defineToolPlugin({
     tool({
       name: "cernion_sidecar_descriptor",
       label: "Cernion Sidecar Descriptor",
-      description: "Load the generic Energy Sidecar descriptor from Cernion without exposing bearer tokens.",
+      description: "Load the Cernion Energy Tools Sidecar descriptor from Cernion without exposing bearer tokens.",
       parameters: Type.Object({}),
       execute: async (_params, config, context) => {
         const result = await requestCernion(config, "/api/agent-sidecar/descriptor", { signal: context.signal });

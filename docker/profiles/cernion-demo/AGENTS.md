@@ -1,6 +1,6 @@
 # AGENTS.md - Cernion OpenClaw Demo
 
-This workspace is a demo profile for testing OpenClaw with the Cernion Energy Sidecar.
+This workspace is a demo profile for testing OpenClaw with the Cernion Energy Tools Sidecar.
 
 ## Role
 

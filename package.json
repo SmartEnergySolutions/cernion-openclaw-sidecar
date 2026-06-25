@@ -1,9 +1,8 @@
 {
-  "name": "@cernion/openclaw-energy-sidecar",
+  "name": "@cernion/openclaw-energy-tools-sidecar",
   "version": "0.1.0",
-  "description": "OpenClaw plugin for generic Energy Sidecar providers, with Cernion as the first provider.",
+  "description": "Dedicated OpenClaw sidecar for Cernion Energy Tools.",
   "type": "module",
-  "private": true,
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -15,8 +14,8 @@
   "homepage": "https://github.com/SmartEnergySolutions/cernion-openclaw-sidecar#readme",
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "plugin:build": "npm run build && openclaw plugins build --entry ./dist/index.js",
-    "plugin:validate": "npm run build && openclaw plugins validate --entry ./dist/index.js",
+    "plugin:build": "npm run build && env -u OPENCLAW_STATE_DIR -u OPENCLAW_SERVICE_KIND -u OPENCLAW_GATEWAY_PORT -u OPENCLAW_SERVICE_VERSION openclaw --profile cernion-sidecar-build plugins build --entry ./dist/index.js",
+    "plugin:validate": "npm run build && env -u OPENCLAW_STATE_DIR -u OPENCLAW_SERVICE_KIND -u OPENCLAW_GATEWAY_PORT -u OPENCLAW_SERVICE_VERSION openclaw --profile cernion-sidecar-build plugins validate --entry ./dist/index.js",
     "test": "vitest run",
     "test:integration": "npm run build && node scripts/sidecar-smoke.mjs"
   },
@@ -25,10 +24,13 @@
     "scripts",
     "docker",
     "openclaw.plugin.json",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md",
+    "SECURITY.md",
+    "CONTRIBUTING.md"
   ],
   "peerDependencies": {
-    "openclaw": ">=2026.5.17"
+    "openclaw": ">=2026.6.11-beta.1"
   },
   "dependencies": {
     "typebox": "^1.1.38"
@@ -43,5 +45,8 @@
     "extensions": [
       "./dist/index.js"
     ]
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

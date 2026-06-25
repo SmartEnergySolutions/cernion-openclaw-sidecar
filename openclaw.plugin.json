@@ -1,7 +1,7 @@
 {
-  "id": "cernion-energy-sidecar",
-  "name": "Cernion Energy Sidecar",
-  "description": "Expose Cernion Energy Sidecar tools to OpenClaw through separated evidence and process boundaries.",
+  "id": "cernion-energy-tools-sidecar",
+  "name": "Cernion Energy Tools Sidecar",
+  "description": "Expose Cernion Energy Tools to OpenClaw through separated evidence, knowledge, process-intake, and read-only REST boundaries.",
   "version": "0.1.0",
   "configSchema": {
     "type": "object",

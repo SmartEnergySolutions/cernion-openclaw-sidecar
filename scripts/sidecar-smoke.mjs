@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
-import { queryDomainKnowledge, requestCernion } from "../dist/index.js";
+import { executeRestExecutionPlan, queryDomainKnowledge, requestCernion } from "../dist/index.js";
 
 const baseUrl = process.env.CERNION_BASE_URL || "http://10.0.0.8:3900";
 const bearerTokenFile = process.env.CERNION_READONLY_TOKEN_FILE || "/run/secrets/cernion-readonly-token";
 const timeoutMs = Number(process.env.CERNION_SIDECAR_TIMEOUT_MS || 15000);
+const smokeAssetPath = process.env.CERNION_SMOKE_ASSET_PATH || "/api/assets/solar";
+const smokeAssetLocation = process.env.CERNION_SMOKE_ASSET_LOCATION || "74909";
+const smokeAssetLimit = Number(process.env.CERNION_SMOKE_ASSET_LIMIT || 3);
 
 const config = {
   baseUrl,
@@ -65,6 +68,26 @@ assert(
 );
 assertNoSecretEcho(operations);
 
+const assetList = await executeRestExecutionPlan(config, {
+  method: "GET",
+  path: smokeAssetPath,
+  query: {
+    location: smokeAssetLocation,
+    limit: smokeAssetLimit,
+  },
+});
+assert.notEqual(assetList?.isError, true, "asset-list REST plan must not return a Cernion error");
+assertNoSecretEcho(assetList);
+if (assetList?._sidecar) {
+  assert.equal(assetList._sidecar.assetListPagination?.requestedLimit, smokeAssetLimit);
+  assert(Array.isArray(assetList._sidecar.exportOptions), "asset-list sidecar metadata must include exportOptions");
+  assert(
+    assetList._sidecar.exportOptions.some((option) => option.format === "csv") &&
+      assetList._sidecar.exportOptions.some((option) => option.format === "xls"),
+    "asset-list exportOptions must include csv and xls",
+  );
+}
+
 const fachwissen = await queryDomainKnowledge(config, {
   query: "Welche Pflichten ergeben sich aus §14a EnWG für einen Verteilnetzbetreiber?",
   limit: 3,
@@ -90,6 +113,12 @@ console.log(
       mcpTools: tools.tools.length,
       capabilities: capabilities.data.length,
       operations: operations.data.length,
+      assetSmoke: {
+        path: smokeAssetPath,
+        location: smokeAssetLocation,
+        limit: smokeAssetLimit,
+        sidecarGuidance: Boolean(assetList?._sidecar),
+      },
       knowledgeRagReturned,
     },
     null,

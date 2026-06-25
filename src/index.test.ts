@@ -40,7 +40,7 @@ const EXPECTED_TOOLS = [
   "cernion_api_request",
 ];
 
-describe("cernion-energy-sidecar", () => {
+describe("cernion-energy-tools-sidecar", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     vi.useRealTimers();

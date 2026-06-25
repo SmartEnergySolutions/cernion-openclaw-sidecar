@@ -51,7 +51,7 @@ node <<'NODE' >/tmp/cernion-openclaw-config.json
 const config = {
   plugins: {
     entries: {
-      "cernion-energy-sidecar": {
+      "cernion-energy-tools-sidecar": {
         enabled: true,
         config: {
           baseUrl: process.env.CERNION_BASE_URL || "http://10.0.0.8:3900",
@@ -63,7 +63,7 @@ const config = {
   },
 };
 
-const sidecarConfig = config.plugins.entries["cernion-energy-sidecar"].config;
+const sidecarConfig = config.plugins.entries["cernion-energy-tools-sidecar"].config;
 const envRef = (id) => ({ source: "env", provider: "default", id });
 const providers = {};
 const allowedThinkingLevels = new Set([
@@ -230,7 +230,7 @@ case "${1:-gateway}" in
     exec openclaw --profile "${PROFILE}" dashboard --no-open --yes
     ;;
   test)
-    openclaw --profile "${PROFILE}" plugins inspect cernion-energy-sidecar --runtime --json \
+    openclaw --profile "${PROFILE}" plugins inspect cernion-energy-tools-sidecar --runtime --json \
       | jq -e '
           .plugin.status == "loaded"
           and (.plugin.toolNames | index("cernion_route_evidence"))

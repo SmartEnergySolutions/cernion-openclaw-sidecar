@@ -1,9 +1,9 @@
 # OpenClaw + Cernion Sidecar Docker Demo
 
 This directory contains a self-contained OpenClaw container with the Cernion
-Energy Sidecar plugin preinstalled. It is meant for interested users who have
-access to a Cernion Energy Tools instance and want to try the OpenClaw/Cernion
-interaction from a browser.
+Energy Tools Sidecar plugin preinstalled. It is meant for interested users who
+have access to a Cernion Energy Tools instance and want to try the
+OpenClaw/Cernion interaction from a browser.
 
 The container starts an OpenClaw Gateway and Control UI. Cernion connection
 settings are supplied through environment variables.
@@ -11,7 +11,7 @@ settings are supplied through environment variables.
 ## What Runs
 
 - OpenClaw Gateway and browser Control UI
-- this repository's `cernion-energy-sidecar` plugin
+- this repository's `cernion-energy-tools-sidecar` plugin
 - an isolated OpenClaw profile, default `cernion-demo`
 - a Cernion demo workspace profile copied from
   `docker/profiles/cernion-demo`
@@ -237,6 +237,8 @@ The smoke test checks:
 - Cernion tool-list retrieval
 - a read-only capability-list call
 - capability and operation resolution through `/api/_agent`
+- an asset-list read-only REST plan with explicit `limit`, including Sidecar
+  pagination/export metadata when the returned rows exhaust the limit
 - that token-shaped values are not echoed in returned payloads
 
 ## Useful Commands
@@ -280,6 +282,9 @@ docker compose --env-file docker/.env -f docker/compose.yml run --rm openclaw-ce
 | `CERNION_READONLY_TOKEN` | strict setup | Token used for read-only evidence calls. |
 | `CERNION_PROCESS_TOKEN` | optional | Token used only for `cernion_prepare_process_intent`. |
 | `CERNION_SIDECAR_TIMEOUT_MS` | no | HTTP timeout for Cernion calls, default `15000`. |
+| `CERNION_SMOKE_ASSET_PATH` | no | Asset endpoint used by the smoke test, default `/api/assets/solar`. |
+| `CERNION_SMOKE_ASSET_LOCATION` | no | Asset location used by the smoke test, default `74909`. |
+| `CERNION_SMOKE_ASSET_LIMIT` | no | Asset limit used by the smoke test, default `3`. |
 | `OPENCLAW_MODEL` | recommended | Demo-agent model id, for example `google/gemini-3.1-pro-preview`. |
 | `OPENCLAW_THINKING` | recommended | Demo-agent thinking level: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `adaptive`, or `max`; recommended `adaptive`. |
 | `OPENCLAW_CONTROLUI_PORT` | no | Host port for Control UI, default `19101`. |

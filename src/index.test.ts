@@ -1001,7 +1001,7 @@ describe("cernion-energy-sidecar", () => {
     );
 
     expect(fetchMock).toHaveBeenCalledWith(
-      "https://cernion.example/api/assets/solar?location=69168&minCapacityKW=10&maxCapacityKW=13&commissioningYear=2025",
+      "https://cernion.example/api/assets/solar?location=69168&minCapacityKW=10&maxCapacityKW=13&commissioningYear=2025&limit=500",
       expect.objectContaining({
         method: "GET",
         headers: expect.objectContaining({
@@ -1012,6 +1012,83 @@ describe("cernion-energy-sidecar", () => {
     expect(result).toEqual({
       success: true,
       assets: [{ see: "SEE912915502954", echoed: "[redacted]" }],
+    });
+  });
+
+  it("adds asset-list pagination and export guidance when a REST plan exhausts its limit", async () => {
+    const assets = Array.from({ length: 3 }, (_value, index) => ({ see: `SEE-${index + 1}` }));
+    const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      text: async () =>
+        JSON.stringify({
+          success: true,
+          totalCount: 570,
+          assets,
+        }),
+    } as Response);
+
+    const result = await executeRestExecutionPlan(
+      {
+        baseUrl: "https://cernion.example/",
+        bearerToken: "ck_readonly_secret",
+      },
+      {
+        method: "GET",
+        path: "/api/assets/solar",
+        query: {
+          location: "74909",
+          limit: 3,
+        },
+      },
+    );
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://cernion.example/api/assets/solar?location=74909&limit=3",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(result).toMatchObject({
+      success: true,
+      totalCount: 570,
+      assets,
+      _sidecar: {
+        assetListPagination: {
+          requestedLimit: 3,
+          returnedCount: 3,
+          totalCount: 570,
+          limitExhausted: true,
+          hasMore: true,
+          nextPage: {
+            path: "/api/assets/solar",
+            params: {
+              location: "74909",
+              limit: 3,
+              offset: 3,
+            },
+          },
+        },
+        exportOptions: [
+          {
+            format: "csv",
+            path: "/api/assets/solar",
+            params: {
+              location: "74909",
+              limit: 570,
+              format: "csv",
+            },
+          },
+          {
+            format: "xls",
+            path: "/api/assets/solar",
+            params: {
+              location: "74909",
+              limit: 570,
+              format: "xls",
+            },
+          },
+        ],
+      },
     });
   });
 

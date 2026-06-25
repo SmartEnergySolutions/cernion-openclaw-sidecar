@@ -2,6 +2,7 @@ import { Type } from "typebox";
 import { defineToolPlugin } from "openclaw/plugin-sdk/tool-plugin";
 import { readFileSync } from "node:fs";
 const DEFAULT_TIMEOUT_MS = 15000;
+const DEFAULT_ASSET_LIST_LIMIT = 500;
 const configSchema = Type.Object({
     baseUrl: Type.Optional(Type.String({ description: "Cernion base URL, for example https://cernion.example" })),
     bearerToken: Type.Optional(Type.String({ description: "Read-only Cernion bearer token. Prefer the OpenClaw secret store." })),
@@ -82,6 +83,35 @@ function buildQueryPath(path, params = {}) {
         return path;
     const separator = path.includes("?") ? "&" : "?";
     return `${path}${separator}${queryParams.toString()}`;
+}
+function parseQueryPath(path) {
+    const [pathname, rawQuery = ""] = path.split("?", 2);
+    const params = {};
+    const searchParams = new URLSearchParams(rawQuery);
+    for (const [key, value] of searchParams.entries()) {
+        params[key] = value;
+    }
+    return { pathname, params };
+}
+function isAssetListPath(path) {
+    const { pathname } = parseQueryPath(path);
+    const normalizedPath = pathname.toLowerCase();
+    return normalizedPath === "/api/assets" || normalizedPath.startsWith("/api/assets/");
+}
+function normalizeReadOnlyGetParams(path, params = {}) {
+    const mergedParams = { ...parseQueryPath(path).params, ...params };
+    if (!isAssetListPath(path))
+        return mergedParams;
+    if (mergedParams.limit !== undefined && mergedParams.limit !== null && mergedParams.limit !== "")
+        return mergedParams;
+    return {
+        ...mergedParams,
+        limit: DEFAULT_ASSET_LIST_LIMIT,
+    };
+}
+function buildReadOnlyGetPath(path, params = {}) {
+    const { pathname } = parseQueryPath(path);
+    return buildQueryPath(pathname, normalizeReadOnlyGetParams(path, params));
 }
 function combineAbortSignals(signals) {
     const activeSignals = signals.filter(Boolean);
@@ -190,10 +220,12 @@ async function executeRestExecutionPlan(config, plan, signal) {
         throw new Error("Cernion read-only REST proxy is disabled by configuration.");
     }
     const validated = validateRestExecutionPlan(plan);
-    return requestCernion(config, buildQueryPath(validated.path, validated.params), {
+    const params = normalizeReadOnlyGetParams(validated.path, validated.params);
+    const result = await requestCernion(config, buildReadOnlyGetPath(validated.path, validated.params), {
         method: validated.method,
         signal,
     });
+    return annotateAssetListResult(result, validated.path, params);
 }
 async function routeEvidence(config, request, signal) {
     return requestCernion(config, "/api/evidence-router/route", {
@@ -233,6 +265,95 @@ function normalizeDomainKnowledgeQuery(request) {
 }
 function isObject(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+function toPositiveInteger(value) {
+    const numberValue = Number(value);
+    if (!Number.isFinite(numberValue) || numberValue <= 0)
+        return undefined;
+    return Math.floor(numberValue);
+}
+function countListItems(result) {
+    const candidates = [
+        result.assets,
+        result.items,
+        result.results,
+        result.installations,
+        result.data,
+        getNestedObject(result, ["data"]).assets,
+        getNestedObject(result, ["data"]).items,
+        getNestedObject(result, ["data"]).results,
+        getNestedObject(result, ["structuredContent"]).assets,
+        getNestedObject(result, ["structuredContent"]).items,
+        getNestedObject(result, ["structuredContent"]).results,
+    ];
+    const list = candidates.find(Array.isArray);
+    return Array.isArray(list) ? list.length : undefined;
+}
+function extractTotalCount(result) {
+    const candidates = [
+        result.total,
+        result.totalCount,
+        result.totalResults,
+        result.totalMatchingAssetsCount,
+        result.countTotal,
+        getNestedObject(result, ["data"]).total,
+        getNestedObject(result, ["data"]).totalCount,
+        getNestedObject(result, ["data"]).totalMatchingAssetsCount,
+        getNestedObject(result, ["structuredContent"]).total,
+        getNestedObject(result, ["structuredContent"]).totalCount,
+        getNestedObject(result, ["structuredContent"]).totalMatchingAssetsCount,
+    ];
+    return candidates.map(toPositiveInteger).find((value) => value !== undefined);
+}
+function annotateAssetListResult(result, path, params) {
+    if (!isAssetListPath(path) || !isObject(result) || result.isError === true)
+        return result;
+    const { pathname } = parseQueryPath(path);
+    const requestedLimit = toPositiveInteger(params.limit);
+    if (!requestedLimit)
+        return result;
+    const returnedCount = countListItems(result);
+    const totalCount = extractTotalCount(result);
+    const limitExhausted = returnedCount !== undefined && returnedCount >= requestedLimit;
+    const hasMore = totalCount !== undefined ? totalCount > (returnedCount || 0) : limitExhausted;
+    if (!limitExhausted && !hasMore)
+        return result;
+    const nextOffset = toPositiveInteger(params.offset) || 0;
+    const nextPageParams = {
+        ...params,
+        offset: nextOffset + requestedLimit,
+        limit: requestedLimit,
+    };
+    const exportBaseParams = { ...params, limit: totalCount || requestedLimit };
+    return {
+        ...result,
+        _sidecar: {
+            assetListPagination: {
+                requestedLimit,
+                returnedCount,
+                ...(totalCount === undefined ? {} : { totalCount }),
+                limitExhausted,
+                hasMore,
+                nextPage: {
+                    path: pathname,
+                    params: nextPageParams,
+                },
+            },
+            exportOptions: [
+                {
+                    format: "csv",
+                    path: pathname,
+                    params: { ...exportBaseParams, format: "csv" },
+                },
+                {
+                    format: "xls",
+                    path: pathname,
+                    params: { ...exportBaseParams, format: "xls" },
+                },
+            ],
+            answerGuidance: "Do not present the current rows as a complete asset inventory when limitExhausted=true or hasMore=true. Tell the user how many rows were returned, mention the requested limit, and offer CSV/XLS export or the next page.",
+        },
+    };
 }
 function getNestedObject(value, path) {
     let current = value;
@@ -589,10 +710,12 @@ async function executeEvidenceEndpointPlan(config, plan, signal) {
     }
     const validated = validateEvidenceEndpointPlan(plan);
     if (validated.method === "GET") {
-        return requestCernion(config, buildQueryPath(validated.path, validated.params), {
+        const params = normalizeReadOnlyGetParams(validated.path, validated.params);
+        const result = await requestCernion(config, buildReadOnlyGetPath(validated.path, validated.params), {
             method: "GET",
             signal,
         });
+        return annotateAssetListResult(result, validated.path, params);
     }
     return requestCernion(config, validated.path, {
         method: "POST",
@@ -750,7 +873,7 @@ export default defineToolPlugin({
         tool({
             name: "cernion_execute_evidence_endpoint",
             label: "Execute Cernion Evidence Endpoint",
-            description: "Execute one read-only GET or POST evidence endpoint recommended by cernion_route_evidence. Requires Cernion policy.readOnly=true and sideEffects=none, blocks process/admin/token/HITL/provider-tool paths, and returns scrubbed structured results for OpenClaw-side transformation.",
+            description: "Execute one read-only GET or POST evidence endpoint recommended by cernion_route_evidence. Requires Cernion policy.readOnly=true and sideEffects=none, blocks process/admin/token/HITL/provider-tool paths, and returns scrubbed structured results for OpenClaw-side transformation. For Cernion asset-list GET endpoints, the Sidecar sets an explicit default limit when none is provided and adds _sidecar pagination/export guidance when the returned rows exhaust the limit.",
             parameters: Type.Object({
                 method: Type.Optional(Type.String({ description: "HTTP method from the recommended endpoint. Only GET or POST is allowed." })),
                 path: Type.String({ description: "Relative Cernion API path from the recommended endpoint, e.g. /api/energy-market/co2-intensity." }),
@@ -895,7 +1018,7 @@ export default defineToolPlugin({
         tool({
             name: "cernion_execute_rest_plan",
             label: "Execute Cernion REST Plan",
-            description: "Proxy one read-only Cernion REST execution plan emitted by cernion.ask or the Cernion blueprint/capability runtime. The Sidecar supplies the configured base URL and bearer token, validates the plan as GET-only, and returns scrubbed structured results.",
+            description: "Proxy one read-only Cernion REST execution plan emitted by cernion.ask or the Cernion blueprint/capability runtime. The Sidecar supplies the configured base URL and bearer token, validates the plan as GET-only, and returns scrubbed structured results. For Cernion asset-list endpoints, it sets an explicit default limit when none is provided and adds _sidecar pagination/export guidance when the returned rows exhaust the limit.",
             parameters: Type.Object({
                 method: Type.Optional(Type.String({ description: "HTTP method from the execution plan. Only GET is allowed." })),
                 path: Type.String({ description: "Relative Cernion API path from the execution plan, e.g. /api/assets/solar." }),
@@ -911,17 +1034,18 @@ export default defineToolPlugin({
         tool({
             name: "cernion_api_request",
             label: "Cernion API Request",
-            description: "Perform an authenticated read-only GET request directly against Cernion Energy Tools (CET). Must be used to resolve capabilities, operations, or query specific domain data (like assets.solar) following the llm.txt RESOLUTION PROTOCOL.",
+            description: "Perform an authenticated read-only GET request directly against Cernion Energy Tools (CET). Must be used to resolve capabilities, operations, or query specific domain data (like assets.solar) following the llm.txt RESOLUTION PROTOCOL. For Cernion asset-list endpoints, the Sidecar sets an explicit default limit when none is provided and adds _sidecar pagination/export guidance when the returned rows exhaust the limit.",
             parameters: Type.Object({
                 path: Type.String({ description: "The API path to call, e.g. '/api/_agent/capabilities', '/api/_agent/operations', '/api/assets/solar'." }),
                 params: Type.Optional(Type.Record(Type.String(), Type.Any(), { description: "Query parameters to append to the GET request." })),
             }),
             execute: async ({ path, params = {} }, config, context) => {
-                const result = await requestCernion(config, buildQueryPath(path, params), {
+                const normalizedParams = normalizeReadOnlyGetParams(path, params);
+                const result = await requestCernion(config, buildReadOnlyGetPath(path, params), {
                     method: "GET",
                     signal: context.signal,
                 });
-                return scrubSecretValues(result, config.bearerToken);
+                return scrubSecretValues(annotateAssetListResult(result, path, normalizedParams), config.bearerToken);
             },
         }),
     ],

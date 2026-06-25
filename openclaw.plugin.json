@@ -2,7 +2,7 @@
   "id": "cernion-energy-tools-sidecar",
   "name": "Cernion Energy Tools Sidecar",
   "description": "Expose Cernion Energy Tools to OpenClaw through separated evidence, knowledge, process-intake, and read-only REST boundaries.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "configSchema": {
     "type": "object",
     "properties": {

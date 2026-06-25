@@ -2,7 +2,13 @@
 
 All notable changes to the Cernion Energy Tools Sidecar for OpenClaw are documented here.
 
-## 0.1.0 - Unreleased
+## 0.1.1 - 2026-06-25
+
+- Adds required ClawHub code-plugin metadata:
+  `openclaw.compat.pluginApi` and `openclaw.build.openclawVersion`.
+- Adds `openclaw.runtimeExtensions` pointing at the built runtime entry.
+
+## 0.1.0 - 2026-06-25
 
 - Initial dedicated Cernion Energy Tools Sidecar package for OpenClaw.
 - Exposes Cernion descriptor, tool-list, provider tool calls, Knowledge RAG, OSM grid context, Evidence Router, process-intake, capability/operation resolution, read-only REST plan execution, and direct read-only Cernion API requests.

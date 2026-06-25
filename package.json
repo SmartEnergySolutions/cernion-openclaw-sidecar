@@ -1,6 +1,6 @@
 {
   "name": "@cernion/openclaw-energy-tools-sidecar",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Dedicated OpenClaw sidecar for Cernion Energy Tools.",
   "type": "module",
   "license": "Apache-2.0",
@@ -44,7 +44,16 @@
   "openclaw": {
     "extensions": [
       "./dist/index.js"
-    ]
+    ],
+    "runtimeExtensions": [
+      "./dist/index.js"
+    ],
+    "compat": {
+      "pluginApi": ">=2026.6.11-beta.1"
+    },
+    "build": {
+      "openclawVersion": "2026.6.11-beta.1"
+    }
   },
   "publishConfig": {
     "access": "public"

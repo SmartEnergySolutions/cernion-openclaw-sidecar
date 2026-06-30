@@ -1029,7 +1029,7 @@ export default defineToolPlugin({
   id: "cernion-energy-tools-sidecar",
   name: "Cernion Energy Tools Sidecar",
   description:
-    "Expose Cernion Energy Tools to OpenClaw through separated evidence, knowledge, process-intake, and read-only REST boundaries.",
+    "Give OpenClaw agents Cernion-backed energy evidence for MaStR assets, grid context, Redispatch, ZNP, §14a/§14d, Knowledge RAG, process intake, and read-only operational APIs.",
   configSchema,
   tools: (tool) => [
     tool({

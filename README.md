@@ -1,17 +1,100 @@
 # Cernion Energy Tools Sidecar for OpenClaw
 
-Dedicated OpenClaw tool plugin for Cernion Energy Tools.
+Cernion-backed energy evidence tools for OpenClaw agents: MaStR assets, grid
+context, Redispatch, Zielnetzplanung (ZNP), §14a/§14d EnWG, regulatory
+Knowledge RAG, process intake, and read-only operational APIs.
 
-Cernion Energy Tools is a Swiss Army Knife for energy questions: it combines
-asset inventories, MaStR evidence, grid context, regulatory/procedural
-knowledge, process intake, and read-only operational APIs into one fachliche
-evidence layer. The Sidecar makes that layer available inside OpenClaw so an
-energy-domain assistant can answer with Cernion-backed facts instead of generic
-model memory.
+Most users will not search for a "Cernion Sidecar" directly. They usually have
+an energy-domain question and need an agent that can work with evidence instead
+of generic model memory. This plugin is the bridge: OpenClaw provides the agent
+runtime, conversation, tool orchestration, and final answer synthesis; Cernion
+Energy Tools provides the fachliche energy layer, policies, evidence semantics,
+and read-only execution plans.
 
-The plugin is the ideal fachliche companion for people working in the energy
-sector: grid planning, asset-MDM, Redispatch, Zielnetzplanung, §14a/§14d,
-market communication, storage/PV/load siting, and operational readiness checks.
+Use it when an OpenClaw assistant should answer questions such as:
+
+- "Welche PV-Anlagen, Speicher oder Lasten gibt es in dieser Gemeinde?"
+- "Welche Redispatch-, §14a-, §14d- oder ZNP-Pruefschritte sind relevant?"
+- "Welche Netzbereiche wirken fuer PV, BESS, HPC-Laden oder Waermepumpen kritisch?"
+- "Welche MaStR-, OSM-, Marktpartner-, Last-, CO2- oder Betriebsdaten stuetzen diese Aussage?"
+- "Welche Cernion-Faehigkeit oder API sollte fuer diese Energiefrage genutzt werden?"
+- "Kann ein Prozess vorbereitet werden, ohne ihn schon auszufuehren?"
+
+## Who This Is For
+
+- Stadtwerke, Verteilnetzbetreiber, Energieberater, Asset-MDM-Teams, grid
+  planning teams, Redispatch teams, market-communication teams, and software
+  teams building energy-domain assistants.
+- OpenClaw users who want a local/private assistant to use Cernion data and
+  policies without copying tokens, business logic, or raw operational context
+  into prompts.
+- Cernion users who want a conversational agent surface without moving Cernion's
+  capability routing, policy gates, or source-of-truth semantics into OpenClaw.
+
+## How OpenClaw And Cernion Work Together
+
+| Layer | Responsibility |
+| --- | --- |
+| OpenClaw | Agent runtime, user conversation, memory/workspace instructions, model choice, tool orchestration, answer synthesis, and human-readable explanation. |
+| This Sidecar | Host-side plugin configuration, secret loading, Cernion tool discovery, request validation, token scrubbing, read-only REST plan proxying, and boundary enforcement. |
+| Cernion Energy Tools | Energy-domain capabilities, MaStR and grid evidence, Knowledge RAG, Evidence Router, process-intake policy, capability manifests, and read-only operational APIs. |
+
+This split is the product value: OpenClaw can become an energy assistant without
+learning Cernion internals, while Cernion remains the authority for policies,
+evidence semantics, and which operations are safe.
+
+## Example Prompts
+
+```text
+Mich wuerde interessieren, ob die Gemeinde Meckesheim bereits so viel Erzeugungskapazitaet hat, dass sie sich unter idealen Bedingungen selbst versorgen koennte. Wenn nicht, wie viel Solar muesste zugebaut werden?
+```
+
+```text
+Welche Pflichten ergeben sich aus §14a EnWG fuer einen Verteilnetzbetreiber, und welche Cernion-Evidenz sollte ich fuer einen konkreten Fall pruefen?
+```
+
+```text
+Ich plane 20 MWp PV, 10 MW / 20 MWh Speicher, 30 HPC-Ladepunkte, 800 Waermepumpen und 1.500 Wallboxen in Sinsheim. Welche Spannungsebenen und Netzbereiche koennten kritisch werden, und welche Evidenz fehlt?
+```
+
+```text
+Welche Cernion-Capability passt zu einer Redispatch-Asset-Register-Pruefung, und kann OpenClaw den passenden read-only REST-Plan ausfuehren?
+```
+
+## Capabilities At A Glance
+
+- Regulatory and procedural knowledge: EnWG, §14a/§14d, BNetzA guidance,
+  internal procedures, roles, obligations, and job-help context through Cernion
+  Knowledge RAG.
+- Asset and market evidence: MaStR-backed PV, storage, load, market-partner,
+  and operational evidence through read-only Cernion APIs.
+- Grid context: OSM-visible substations, transformers, lines, voltage-level
+  hints, and topology metrics for ZNP, Netzanschluss, PV/BESS/HPC siting, fNAV,
+  and planning hypotheses.
+- Evidence routing: Cernion recommends the safe read-only endpoint and result
+  semantics; OpenClaw executes through this Sidecar and synthesizes the answer.
+- Capability resolution: OpenClaw can resolve Cernion capability and operation
+  manifests instead of hard-coding domain routing.
+- Process intake: OpenClaw can prepare a pending process receipt through a
+  separate token boundary without executing or resolving the process.
+
+## Install From ClawHub
+
+```bash
+openclaw plugins install clawhub:@cernion/openclaw-energy-tools-sidecar
+```
+
+Then configure the Cernion base URL and a read-only token:
+
+```bash
+export CERNION_BASE_URL="https://cernion.example"
+export CERNION_READONLY_TOKEN_FILE="$HOME/.config/cernion/readonly-token"
+```
+
+See [docker/README.md](docker/README.md) for a browser-based demo container
+that starts OpenClaw with this plugin preinstalled.
+
+## Cernion Sidecar Contract
 
 The plugin consumes the Cernion Sidecar contract implemented by Cernion Energy Tools:
 

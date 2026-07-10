@@ -62,6 +62,13 @@ type GridContextQuery = {
     includeGraphData?: boolean;
     maxResults?: number;
 };
+type OpenApiFallbackRequest = {
+    query: string;
+    params?: Record<string, unknown>;
+    domain?: string;
+    execute?: boolean;
+    limit?: number;
+};
 declare function requireConfig(config: PluginConfig): {
     baseUrl: string;
     bearerToken: string;
@@ -102,6 +109,7 @@ declare function executeEvidenceEndpointPlan(config: PluginConfig, plan: Evidenc
 declare function requestCernion(config: PluginConfig, path: string, options?: RequestOptions): Promise<unknown>;
 declare function requestCernionProcess(config: PluginConfig, path: string, options?: RequestOptions): Promise<unknown>;
 declare function scrubSecretValues(value: unknown, token?: string): unknown;
+declare function resolveOpenApiFallback(config: PluginConfig, request: OpenApiFallbackRequest, signal?: AbortSignal): Promise<unknown>;
 declare const _default: import("openclaw/plugin-sdk/tool-plugin").DefinedToolPluginEntry;
 export default _default;
-export { buildQueryPath, buildUrl, executeEvidenceEndpointPlan, executeRestExecutionPlan, isRestProxyAllowed, normalizeDomainKnowledgeQuery, normalizeGridContextQuery, assessDomainKnowledgeEvidence, assessGridContextEvidence, pollCernionJobResult, queryGridContext, queryDomainKnowledge, requireConfig, requireProcessConfig, requestCernion, requestCernionProcess, routeEvidence, scrubSecretValues, validateEvidenceEndpointPlan, validateRestExecutionPlan, };
+export { buildQueryPath, buildUrl, executeEvidenceEndpointPlan, executeRestExecutionPlan, isRestProxyAllowed, normalizeDomainKnowledgeQuery, normalizeGridContextQuery, assessDomainKnowledgeEvidence, assessGridContextEvidence, pollCernionJobResult, queryGridContext, queryDomainKnowledge, requireConfig, requireProcessConfig, requestCernion, requestCernionProcess, resolveOpenApiFallback, routeEvidence, scrubSecretValues, validateEvidenceEndpointPlan, validateRestExecutionPlan, };

@@ -119,6 +119,8 @@ It does not implement Cernion domain logic and must not expose admin/token/HITL-
 
 `cernion.ask` is the generic learning/compile boundary for OpenClaw. It may return a direct read-only REST execution plan that was selected by Cernion's Blueprint/Capability runtime. OpenClaw can then ask this plugin to proxy that plan against the configured Cernion `baseUrl` without learning tokens or hard-coding domain routing in the Sidecar.
 
+When curated capabilities or `cernion.ask` do not resolve a rarely used endpoint, the Sidecar also provides a generic OpenAPI fallback. It loads Cernion's operation manifest, ranks operations locally against the user request, and may execute the best Sidecar-safe `GET` endpoint with supplied parameters. This is intentionally narrower than the full Cernion policy runtime: `POST` or otherwise blocked operations are returned as non-executable candidates and still require a curated Cernion Evidence Router policy plan before execution.
+
 ## Tools
 
 - `cernion_sidecar_descriptor` loads the Cernion Energy Tools Sidecar descriptor.
@@ -134,6 +136,7 @@ It does not implement Cernion domain logic and must not expose admin/token/HITL-
 - `cernion_resolve_capability` resolves a single capability id to full detail.
 - `cernion_resolve_operations` resolves manifest operation clusters to deduplicated operation details, optionally filtered by `domain`.
 - `cernion_execute_rest_plan` proxies one GET-only REST execution plan emitted by Cernion. It validates that the plan is a relative `/api/` path and blocks admin/auth/token/HITL-resolve/provider-tool recursion paths. Asset-list GETs receive explicit limit and pagination/export guidance.
+- `cernion_openapi_fallback` searches the Cernion OpenAPI operation manifest as a generic read-only fallback. It scores natural-language requests against operation paths, ids, summaries, tags, and aliases; returns ranked candidates; and can optionally execute the top safe `GET` operation with supplied params. Use it after curated capabilities, Evidence Router, or `cernion.ask` fail to return a deterministic plan.
 - `cernion_api_request` performs an authenticated read-only GET against Cernion for fallback resolution or domain data queries. Asset-list GETs receive explicit limit and pagination/export guidance.
 
 `cernion_resolve_operations` uses the provider's canonicalized operation list: duplicate `operationId` entries that appear under trailing-slash or service-prefix aliases are returned once with a canonical path and an `aliases` list.

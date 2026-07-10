@@ -100,6 +100,36 @@ type GridContextQuery = {
   maxResults?: number;
 };
 
+type OpenApiFallbackRequest = {
+  query: string;
+  params?: Record<string, unknown>;
+  domain?: string;
+  execute?: boolean;
+  limit?: number;
+};
+
+type OpenApiOperation = {
+  method?: string;
+  path?: string;
+  operationId?: string;
+  summary?: string;
+  description?: string;
+  tags?: string[];
+  aliases?: string[];
+};
+
+type OpenApiFallbackCandidate = {
+  method: string;
+  path: string;
+  operationId?: string;
+  summary?: string;
+  tags?: string[];
+  aliases?: string[];
+  score: number;
+  executeSupported: boolean;
+  blockedReason?: string;
+};
+
 function stripTrailingSlash(value: string): string {
   return value.replace(/\/+$/, "");
 }
@@ -300,6 +330,11 @@ function assertNotBlockedPath(path: string): void {
   if (blockedPathMarkers.some((marker) => lowerPath.startsWith(marker))) {
     throw new Error("Cernion API plan path is outside the Sidecar proxy boundary.");
   }
+}
+
+function validateReadOnlyApiGetPath(path: string): void {
+  assertRelativeApiPath(path);
+  assertNotBlockedPath(path);
 }
 
 function validateEvidenceEndpointPlan(plan: EvidenceEndpointPlan): {
@@ -1025,6 +1060,239 @@ function scrubSecretValues(value: unknown, token?: string): unknown {
   return JSON.parse(scrubbed);
 }
 
+function collectOperations(value: unknown): OpenApiOperation[] {
+  if (Array.isArray(value)) return value.filter(isObject) as OpenApiOperation[];
+  if (!isObject(value)) return [];
+  const data = value.data;
+  if (Array.isArray(data)) return data.filter(isObject) as OpenApiOperation[];
+  const operations = value.operations;
+  if (Array.isArray(operations)) return operations.filter(isObject) as OpenApiOperation[];
+  return [];
+}
+
+const QUERY_EXPANSIONS: Array<{ pattern: RegExp; terms: string[] }> = [
+  {
+    pattern: /börsenstrompreis|boersenstrompreis|strompreis|spotpreis|spotmarkt|epex|day.?ahead|smard/i,
+    terms: [
+      "market",
+      "snapshot",
+      "spot",
+      "price",
+      "prices",
+      "day",
+      "ahead",
+      "day-ahead",
+      "entsoe",
+      "netztransparenz",
+      "smard",
+      "epex",
+    ],
+  },
+  {
+    pattern: /gas.?speicher|gasspeicher|füllstand|fuellstand|speicherstand|gas storage|storage fill/i,
+    terms: ["gas", "storage", "country", "fill", "level", "filling", "agsi", "gie", "supply"],
+  },
+  {
+    pattern: /redispatch|engpass|curtailment|abregel/i,
+    terms: ["redispatch", "curtailment", "congestion", "bottleneck", "netztransparenz"],
+  },
+  {
+    pattern: /pv|solar|photovoltaik|anlage|anlagen|mastr|marktstammdaten/i,
+    terms: ["assets", "solar", "photovoltaic", "mastr", "installations"],
+  },
+];
+
+const GENERIC_QUERY_STOPWORDS = new Set([
+  "bitte",
+  "kannst",
+  "kann",
+  "aktuellen",
+  "aktuelle",
+  "aktuell",
+  "herausfinden",
+  "abrufen",
+  "finden",
+  "zeige",
+  "zeig",
+  "gib",
+  "mir",
+  "den",
+  "die",
+  "das",
+  "der",
+  "ein",
+  "eine",
+  "einen",
+  "einer",
+  "und",
+  "oder",
+  "fuer",
+  "für",
+  "von",
+  "vom",
+  "mit",
+  "welche",
+  "welcher",
+  "welches",
+  "what",
+  "show",
+  "get",
+  "find",
+  "current",
+  "latest",
+  "please",
+]);
+
+function tokenizeSearchText(value: unknown): string[] {
+  return normalizedText(value)
+    .replace(/[_./:-]+/g, " ")
+    .replace(/[^\p{L}\p{N}-]+/gu, " ")
+    .split(/\s+/)
+    .map((token) => token.trim())
+    .filter((token) => token.length >= 3 && !GENERIC_QUERY_STOPWORDS.has(token));
+}
+
+function expandedQueryTokens(query: string): string[] {
+  const tokens = tokenizeSearchText(query);
+  for (const expansion of QUERY_EXPANSIONS) {
+    if (expansion.pattern.test(query)) tokens.push(...expansion.terms);
+  }
+  return Array.from(new Set(tokens));
+}
+
+function operationSearchText(operation: OpenApiOperation): string {
+  return normalizedText({
+    method: operation.method,
+    path: operation.path,
+    operationId: operation.operationId,
+    summary: operation.summary,
+    description: operation.description,
+    tags: operation.tags,
+    aliases: operation.aliases,
+  });
+}
+
+function scoreOpenApiOperation(operation: OpenApiOperation, queryTokens: string[]): number {
+  const method = String(operation.method || "").toUpperCase();
+  const path = String(operation.path || "");
+  if (!method || !path) return 0;
+
+  const haystack = operationSearchText(operation);
+  let score = method === "GET" ? 3 : 0;
+  for (const token of queryTokens) {
+    if (!haystack.includes(token)) continue;
+    score += 1;
+    const pathText = normalizedText(path);
+    const operationId = normalizedText(operation.operationId);
+    if (pathText.includes(token)) score += 2;
+    if (operationId.includes(token)) score += 1;
+  }
+
+  if (method !== "GET") score -= 2;
+  if (path.includes("/:")) score -= 1;
+  return score;
+}
+
+function toOpenApiFallbackCandidate(operation: OpenApiOperation, score: number): OpenApiFallbackCandidate {
+  const method = String(operation.method || "").toUpperCase();
+  const path = String(operation.path || "");
+  let executeSupported = method === "GET";
+  let blockedReason: string | undefined;
+
+  try {
+    if (executeSupported) validateReadOnlyApiGetPath(path);
+  } catch (error) {
+    executeSupported = false;
+    blockedReason = error instanceof Error ? error.message : String(error);
+  }
+  if (method !== "GET") {
+    blockedReason = "Only GET OpenAPI operations are executable through the generic fallback.";
+  }
+
+  return {
+    method,
+    path,
+    ...(operation.operationId ? { operationId: operation.operationId } : {}),
+    ...(operation.summary ? { summary: operation.summary } : {}),
+    ...(operation.tags ? { tags: operation.tags } : {}),
+    ...(operation.aliases ? { aliases: operation.aliases } : {}),
+    score,
+    executeSupported,
+    ...(blockedReason ? { blockedReason } : {}),
+  };
+}
+
+function fillPathParams(path: string, params: Record<string, unknown>): { path: string; params: Record<string, unknown> } {
+  const remaining = { ...params };
+  const pathWithParams = path.replace(/:([A-Za-z0-9_]+)/g, (_match, name: string) => {
+    const value = remaining[name];
+    if (value === undefined || value === null || value === "") {
+      throw new Error(`Missing path parameter '${name}' for OpenAPI fallback execution.`);
+    }
+    delete remaining[name];
+    return encodeURIComponent(String(value));
+  });
+  return { path: pathWithParams, params: remaining };
+}
+
+async function resolveOpenApiFallback(
+  config: PluginConfig,
+  request: OpenApiFallbackRequest,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  const query = String(request.query || "").trim();
+  if (!query) {
+    throw new Error("query is required for OpenAPI fallback resolution.");
+  }
+
+  const limit = Math.max(1, Math.min(20, Number(request.limit || 5)));
+  const manifest = await requestCernion(config, buildQueryPath("/api/_agent/operations", { domain: request.domain }), {
+    method: "GET",
+    signal,
+  });
+  const tokens = expandedQueryTokens(query);
+  const candidates = collectOperations(manifest)
+    .map((operation) => toOpenApiFallbackCandidate(operation, scoreOpenApiOperation(operation, tokens)))
+    .filter((candidate) => candidate.score > 0)
+    .sort((a, b) => b.score - a.score || Number(b.executeSupported) - Number(a.executeSupported))
+    .slice(0, limit);
+
+  const executableCandidate = candidates.find((candidate) => candidate.executeSupported);
+  const response: Record<string, unknown> = {
+    kind: "openapi_fallback_resolution",
+    query,
+    queryTokens: tokens,
+    manifestPath: "/api/_agent/operations",
+    candidateCount: candidates.length,
+    candidates,
+    selected: executableCandidate || null,
+    answerGuidance:
+      "Use this only as a generic read-only OpenAPI fallback after curated Cernion capabilities, Evidence Router, or cernion.ask fail to return a deterministic plan. Prefer selected.path only when executeSupported=true; POST or blocked operations need a curated Evidence Router policy plan.",
+  };
+
+  if (request.execute !== true || !executableCandidate) return response;
+
+  const { path, params } = fillPathParams(executableCandidate.path, request.params || {});
+  const result = await executeRestExecutionPlan(
+    config,
+    {
+      method: "GET",
+      path,
+      params,
+    },
+    signal,
+  );
+  return {
+    ...response,
+    execution: {
+      method: "GET",
+      path,
+      params,
+    },
+    result,
+  };
+}
+
 export default defineToolPlugin({
   id: "cernion-energy-tools-sidecar",
   name: "Cernion Energy Tools Sidecar",
@@ -1273,6 +1541,23 @@ export default defineToolPlugin({
       },
     }),
     tool({
+      name: "cernion_openapi_fallback",
+      label: "Cernion OpenAPI Fallback",
+      description:
+        "Resolve a natural-language request against Cernion's OpenAPI operation manifest when curated capabilities, Evidence Router, or cernion.ask do not return a deterministic plan. It scores operations locally, returns ranked candidates, and can optionally execute the best Sidecar-safe GET endpoint with supplied params. POST or blocked endpoints are surfaced only as non-executable candidates and require a curated Cernion evidence policy plan before execution.",
+      parameters: Type.Object({
+        query: Type.String({ description: "Natural-language request to resolve against the Cernion OpenAPI operation manifest." }),
+        params: Type.Optional(Type.Record(Type.String(), Type.Any(), { description: "Query/path parameters for optional GET execution. Path params like :id are filled from matching keys." })),
+        domain: Type.Optional(Type.String({ description: "Optional manifest domain filter forwarded to /api/_agent/operations." })),
+        execute: Type.Optional(Type.Boolean({ description: "Execute the best safe GET candidate. Defaults to false." })),
+        limit: Type.Optional(Type.Number({ description: "Maximum ranked candidates to return, 1..20. Defaults to 5." })),
+      }),
+      execute: async (params, config, context) => {
+        const result = await resolveOpenApiFallback(config, params as OpenApiFallbackRequest, context.signal);
+        return scrubSecretValues(result, config.bearerToken);
+      },
+    }),
+    tool({
       name: "cernion_api_request",
       label: "Cernion API Request",
       description: "Perform an authenticated read-only GET request directly against Cernion Energy Tools (CET). Must be used to resolve capabilities, operations, or query specific domain data (like assets.solar) following the llm.txt RESOLUTION PROTOCOL. For Cernion asset-list endpoints, the Sidecar sets an explicit default limit when none is provided and adds _sidecar pagination/export guidance when the returned rows exhaust the limit.",
@@ -1309,6 +1594,7 @@ export {
   requireProcessConfig,
   requestCernion,
   requestCernionProcess,
+  resolveOpenApiFallback,
   routeEvidence,
   scrubSecretValues,
   validateEvidenceEndpointPlan,

@@ -1,6 +1,6 @@
 {
   "name": "@cernion/openclaw-energy-tools-sidecar",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Cernion energy evidence tools for OpenClaw agents: MaStR assets, grid context, Redispatch, ZNP, §14a/§14d, Knowledge RAG, and read-only operational APIs.",
   "keywords": [
     "openclaw",

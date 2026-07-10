@@ -13,6 +13,7 @@ import entry, {
   requireProcessConfig,
   requestCernion,
   requestCernionProcess,
+  resolveOpenApiFallback,
   routeEvidence,
   scrubSecretValues,
   validateEvidenceEndpointPlan,
@@ -37,6 +38,7 @@ const EXPECTED_TOOLS = [
   "cernion_resolve_capability",
   "cernion_resolve_operations",
   "cernion_execute_rest_plan",
+  "cernion_openapi_fallback",
   "cernion_api_request",
 ];
 
@@ -1103,6 +1105,175 @@ describe("cernion-energy-tools-sidecar", () => {
         { method: "GET", path: "/api/assets/solar" },
       ),
     ).rejects.toThrow(/disabled/);
+  });
+
+  it("resolves and executes a safe GET OpenAPI fallback for current market price", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        text: async () =>
+          JSON.stringify({
+            data: [
+              {
+                method: "GET",
+                path: "/api/dashboard/market-snapshot",
+                operationId: "dashboard-api_marketSnapshot",
+                summary: "Market snapshot — current spot prices, CO₂ intensity, renewable forecast",
+                tags: ["Dashboard API"],
+              },
+              {
+                method: "POST",
+                path: "/api/german-grid/spotprices",
+                operationId: "german-grid_spotprices",
+                summary: "German spotmarket prices for dynamic tariffs",
+                tags: ["German Grid Data"],
+              },
+            ],
+          }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        text: async () =>
+          JSON.stringify({
+            spotPrice: { current: 141.23, source: "entsoe", echoed: "ck_readonly_secret" },
+            timestamp: "2026-07-09T23:50:29.170Z",
+          }),
+      } as Response);
+
+    const result = await resolveOpenApiFallback(
+      {
+        baseUrl: "https://cernion.example/",
+        bearerToken: "ck_readonly_secret",
+      },
+      {
+        query: "aktueller Börsenstrompreis DE-LU",
+        params: { location: "Deutschland" },
+        execute: true,
+      },
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://cernion.example/api/_agent/operations",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://cernion.example/api/dashboard/market-snapshot?location=Deutschland",
+      expect.objectContaining({ method: "GET" }),
+    );
+    expect(result).toMatchObject({
+      kind: "openapi_fallback_resolution",
+      selected: {
+        method: "GET",
+        path: "/api/dashboard/market-snapshot",
+        executeSupported: true,
+      },
+      execution: {
+        method: "GET",
+        path: "/api/dashboard/market-snapshot",
+        params: { location: "Deutschland" },
+      },
+      result: {
+        spotPrice: { current: 141.23, source: "entsoe", echoed: "[redacted]" },
+      },
+    });
+    expect(JSON.stringify(result)).not.toContain("ck_readonly_secret");
+  });
+
+  it("does not execute POST OpenAPI fallback candidates without an evidence policy plan", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: "OK",
+      text: async () =>
+        JSON.stringify({
+          data: [
+            {
+              method: "POST",
+              path: "/api/german-grid/spotprices",
+              operationId: "german-grid_spotprices",
+              summary: "German spotmarket prices for dynamic tariffs",
+              tags: ["German Grid Data"],
+            },
+          ],
+        }),
+    } as Response);
+
+    const result = await resolveOpenApiFallback(
+      {
+        baseUrl: "https://cernion.example/",
+        bearerToken: "ck_readonly_secret",
+      },
+      {
+        query: "spotmarket prices",
+        execute: true,
+      },
+    );
+
+    expect(result).toMatchObject({
+      kind: "openapi_fallback_resolution",
+      selected: null,
+      candidates: [
+        {
+          method: "POST",
+          path: "/api/german-grid/spotprices",
+          executeSupported: false,
+          blockedReason: "Only GET OpenAPI operations are executable through the generic fallback.",
+        },
+      ],
+    });
+  });
+
+  it("fills path parameters before executing a safe OpenAPI fallback GET", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        text: async () =>
+          JSON.stringify({
+            data: [
+              {
+                method: "GET",
+                path: "/api/assets/:assetId/effective",
+                operationId: "assets_effective",
+                summary: "Get effective asset view",
+                tags: ["Assets"],
+              },
+            ],
+          }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        text: async () => JSON.stringify({ success: true, assetId: "SEE 1" }),
+      } as Response);
+
+    await resolveOpenApiFallback(
+      {
+        baseUrl: "https://cernion.example/",
+        bearerToken: "ck_readonly_secret",
+      },
+      {
+        query: "effective asset view",
+        params: { assetId: "SEE 1", includeOverrides: true },
+        execute: true,
+      },
+    );
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://cernion.example/api/assets/SEE%201/effective?includeOverrides=true&limit=500",
+      expect.objectContaining({ method: "GET" }),
+    );
   });
 
   it("sends authenticated GET requests via requestCernion with params", async () => {

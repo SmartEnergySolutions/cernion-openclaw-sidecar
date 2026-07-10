@@ -2,7 +2,7 @@
   "id": "cernion-energy-tools-sidecar",
   "name": "Cernion Energy Tools Sidecar",
   "description": "Give OpenClaw agents Cernion-backed energy evidence for MaStR assets, grid context, Redispatch, ZNP, §14a/§14d, Knowledge RAG, process intake, and read-only operational APIs.",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "configSchema": {
     "type": "object",
     "properties": {
@@ -130,6 +130,7 @@
       "cernion_resolve_capability",
       "cernion_resolve_operations",
       "cernion_execute_rest_plan",
+      "cernion_openapi_fallback",
       "cernion_api_request"
     ]
   }
